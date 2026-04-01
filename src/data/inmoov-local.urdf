@@ -1,0 +1,208 @@
+<?xml version="1.0"?>
+<robot name="inmoov">
+  <!-- Base/Torso link -->
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <mesh filename="package://meshes/torso.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="white"><color rgba="0.85 0.85 0.85 1"/></material>
+    </visual>
+  </link>
+
+  <!-- HEAD - Position above torso -->
+  <link name="head_link">
+    <visual>
+      <geometry>
+        <mesh filename="package://meshes/head.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="white"/>
+    </visual>
+  </link>
+
+  <joint name="head_roll_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="head_link"/>
+    <origin xyz="0.0 0.0 0.4" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-1.57" upper="1.57" effort="10" velocity="1"/>
+  </joint>
+
+  <!-- HEAD DUMMY JOINTS for skeleton -->
+  <link name="head_pan_dummy"><visual><geometry><box size="0.001 0.001 0.001"/></geometry></visual></link>
+  <joint name="head_pan_joint" type="revolute">
+    <parent link="head_link"/><child link="head_pan_dummy"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/><limit lower="-1.57" upper="1.57" effort="5" velocity="1"/>
+  </joint>
+
+  <link name="head_tilt_dummy"><visual><geometry><box size="0.001 0.001 0.001"/></geometry></visual></link>
+  <joint name="head_tilt_joint" type="revolute">
+    <parent link="head_link"/><child link="head_tilt_dummy"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/><limit lower="-1.57" upper="1.57" effort="5" velocity="1"/>
+  </joint>
+
+  <!-- JAW -->
+  <link name="jaw_link">
+    <visual>
+      <geometry>
+        <mesh filename="package://meshes/jaw.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="white"/>
+    </visual>
+  </link>
+
+  <joint name="jaw_joint" type="revolute">
+    <parent link="head_link"/>
+    <child link="jaw_link"/>
+    <origin xyz="0.0 0.0 -0.08" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="0" upper="0.6" effort="5" velocity="1"/>
+  </joint>
+
+  <!-- LEFT SHOULDER -->
+  <link name="l_shoulder_link">
+    <visual>
+      <geometry>
+        <mesh filename="package://meshes/l_shoulder.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="white"/>
+    </visual>
+  </link>
+
+  <joint name="l_shoulder_out_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="l_shoulder_link"/>
+    <origin xyz="0.2 0.0 0.2" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-1.57" upper="1.57" effort="15" velocity="1"/>
+  </joint>
+
+  <!-- LEFT UPPER ARM -->
+  <link name="l_upper_arm_link">
+    <visual>
+      <geometry>
+        <mesh filename="package://meshes/l_forearm.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="white"/>
+    </visual>
+  </link>
+
+  <joint name="l_shoulder_lift_joint" type="revolute">
+    <parent link="l_shoulder_link"/>
+    <child link="l_upper_arm_link"/>
+    <origin xyz="0.1 0.0 0.0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1.57" upper="1.57" effort="15" velocity="1"/>
+  </joint>
+
+  <!-- LEFT FOREARM -->
+  <link name="l_forearm_link">
+    <visual>
+      <geometry>
+        <mesh filename="package://meshes/l_forearm.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="white"/>
+    </visual>
+  </link>
+
+  <joint name="l_elbow_flex_joint" type="revolute">
+    <parent link="l_upper_arm_link"/>
+    <child link="l_forearm_link"/>
+    <origin xyz="0.18 0.0 0.0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="0" upper="2.09" effort="10" velocity="1"/>
+  </joint>
+
+  <!-- LEFT HAND -->
+  <link name="l_hand_link">
+    <visual>
+      <geometry>
+        <mesh filename="package://meshes/l_hand.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="white"/>
+    </visual>
+  </link>
+
+  <joint name="l_wrist_roll_joint" type="revolute">
+    <parent link="l_forearm_link"/>
+    <child link="l_hand_link"/>
+    <origin xyz="0.18 0.0 0.0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-3.14" upper="3.14" effort="10" velocity="1"/>
+  </joint>
+
+  <!-- RIGHT SHOULDER -->
+  <link name="r_shoulder_link">
+    <visual>
+      <geometry>
+        <mesh filename="package://meshes/r_shoulder.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="white"/>
+    </visual>
+  </link>
+
+  <joint name="r_shoulder_out_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="r_shoulder_link"/>
+    <origin xyz="-0.2 0.0 0.2" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-1.57" upper="1.57" effort="15" velocity="1"/>
+  </joint>
+
+  <!-- RIGHT UPPER ARM -->
+  <link name="r_upper_arm_link">
+    <visual>
+      <geometry>
+        <mesh filename="package://meshes/r_forearm.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="white"/>
+    </visual>
+  </link>
+
+  <joint name="r_shoulder_lift_joint" type="revolute">
+    <parent link="r_shoulder_link"/>
+    <child link="r_upper_arm_link"/>
+    <origin xyz="-0.1 0.0 0.0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1.57" upper="1.57" effort="15" velocity="1"/>
+  </joint>
+
+  <!-- RIGHT FOREARM -->
+  <link name="r_forearm_link">
+    <visual>
+      <geometry>
+        <mesh filename="package://meshes/r_forearm.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="white"/>
+    </visual>
+  </link>
+
+  <joint name="r_elbow_flex_joint" type="revolute">
+    <parent link="r_upper_arm_link"/>
+    <child link="r_forearm_link"/>
+    <origin xyz="-0.18 0.0 0.0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="0" upper="2.09" effort="10" velocity="1"/>
+  </joint>
+
+  <!-- RIGHT HAND -->
+  <link name="r_hand_link">
+    <visual>
+      <geometry>
+        <mesh filename="package://meshes/r_hand.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="white"/>
+    </visual>
+  </link>
+
+  <joint name="r_wrist_roll_joint" type="revolute">
+    <parent link="r_forearm_link"/>
+    <child link="r_hand_link"/>
+    <origin xyz="-0.18 0.0 0.0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-3.14" upper="3.14" effort="10" velocity="1"/>
+  </joint>
+
+</robot>
