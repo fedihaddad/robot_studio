@@ -90,3 +90,6 @@ typings/
 
 # Electron-Forge
 out/
+
+# Local research clone (do not commit)
+.tmp_inmoov_ros/

@@ -20,7 +20,6 @@ export class STLLoader {
           try {
             const geometry = STLLoader.parseSTL(buffer);
             geometry.computeVertexNormals();
-            geometry.center();
             console.log(`[STLLoader] Parsed: ${url} (vertices: ${geometry.attributes.position.count})`);
             resolve(geometry);
           } catch (error) {
@@ -210,17 +209,7 @@ export class URDFBuilder {
             this.log(`Applied scale: ${sx} ${sy} ${sz}`);
           }
 
-          // Apply origin transform
-          if (link.origin) {
-            const [x, y, z] = link.origin.xyz;
-            mesh.position.set(x, y, z);
-
-            const [rx, ry, rz] = link.origin.rpy;
-            mesh.rotation.order = 'XYZ';
-            mesh.rotation.x = rx;
-            mesh.rotation.y = ry;
-            mesh.rotation.z = rz;
-          }
+          this.applyVisualOrigin(mesh, link);
 
           linkGroup.add(mesh);
           this.log(`✓ Loaded: ${link.name}`);
@@ -234,6 +223,7 @@ export class URDFBuilder {
           );
           const material = new THREE.MeshPhongMaterial({ color: 0x888888 });
           const mesh = new THREE.Mesh(geometry, material);
+          this.applyVisualOrigin(mesh, link);
           linkGroup.add(mesh);
         } else if (link.geometry?.type === 'cylinder') {
           const dims = link.geometry.dimensions || {};
@@ -242,14 +232,18 @@ export class URDFBuilder {
             dims.radius || 0.05,
             dims.length || 0.2
           );
+          // URDF cylinders are along Z axis, Three.js cylinders are along Y axis.
+          geometry.rotateX(Math.PI / 2);
           const material = new THREE.MeshPhongMaterial({ color: 0x888888 });
           const mesh = new THREE.Mesh(geometry, material);
+          this.applyVisualOrigin(mesh, link);
           linkGroup.add(mesh);
         } else if (link.geometry?.type === 'sphere') {
           const dims = link.geometry.dimensions || {};
           const geometry = new THREE.SphereGeometry(dims.radius || 0.1);
           const material = new THREE.MeshPhongMaterial({ color: 0x888888 });
           const mesh = new THREE.Mesh(geometry, material);
+          this.applyVisualOrigin(mesh, link);
           linkGroup.add(mesh);
         }
       } catch (error) {
@@ -312,6 +306,9 @@ export class URDFBuilder {
       const rotationAxis = joint.axis?.xyz || [0, 0, 1];
       (jointGroup as any)._rotationAxis = rotationAxis;
       (jointGroup as any)._jointType = joint.type;
+      // Keep the URDF origin rotation as a base transform.
+      // Joint motion must be applied relative to this quaternion.
+      (jointGroup as any)._baseQuaternion = jointGroup.quaternion.clone();
 
       linkMesh.add(jointGroup);
 
@@ -325,9 +322,22 @@ export class URDFBuilder {
    */
   private resolveMeshPath(filename: string): string {
     if (filename.startsWith('package://')) {
-      // Convert package://inmoov_meshes/meshes/head.stl to /meshes/head.stl
-      const parts = filename.split('/');
-      const meshFile = parts[parts.length - 1];
+      // Examples:
+      // - package://meshes/head.stl -> /meshes/head.stl
+      // - package://inmoov_description/meshes/v2/head.stl -> /meshes/v2/head.stl
+      const withoutProtocol = filename.substring('package://'.length);
+
+      if (withoutProtocol.startsWith('meshes/')) {
+        return `/${withoutProtocol}`;
+      }
+
+      const meshesIndex = withoutProtocol.indexOf('/meshes/');
+      if (meshesIndex >= 0) {
+        return withoutProtocol.substring(meshesIndex);
+      }
+
+      // Fallback: keep only the last segment under /meshes
+      const meshFile = withoutProtocol.split('/').pop();
       return `/meshes/${meshFile}`;
     }
     if (filename.startsWith('file://')) {
@@ -335,6 +345,19 @@ export class URDFBuilder {
       return filename.substring(7);
     }
     return filename;
+  }
+
+  private applyVisualOrigin(mesh: THREE.Mesh, link: URDFLink): void {
+    if (!link.origin) return;
+
+    const [x, y, z] = link.origin.xyz;
+    mesh.position.set(x, y, z);
+
+    const [rx, ry, rz] = link.origin.rpy;
+    mesh.rotation.order = 'XYZ';
+    mesh.rotation.x = rx;
+    mesh.rotation.y = ry;
+    mesh.rotation.z = rz;
   }
 
   /**
@@ -345,6 +368,7 @@ export class URDFBuilder {
     if (!jointGroup) return;
 
     const axis = (jointGroup as any)._rotationAxis || [0, 0, 1];
+    const baseQuaternion = (jointGroup as any)._baseQuaternion as THREE.Quaternion | undefined;
     const [ax, ay, az] = axis;
 
     // Create rotation quaternion
@@ -352,8 +376,12 @@ export class URDFBuilder {
     const axis3 = new THREE.Vector3(ax, ay, az).normalize();
     quaternion.setFromAxisAngle(axis3, angle);
 
-    // Apply rotation
-    jointGroup.quaternion.copy(quaternion);
+    // Apply joint rotation relative to URDF origin orientation
+    if (baseQuaternion) {
+      jointGroup.quaternion.copy(baseQuaternion).multiply(quaternion);
+    } else {
+      jointGroup.quaternion.copy(quaternion);
+    }
   }
 
   /**

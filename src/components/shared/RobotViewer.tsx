@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+﻿import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { parseURDF } from '../../services/urdf.loader';
 import { URDFBuilder } from '../../services/urdf.builder';
@@ -31,6 +31,9 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
   const urdfBuilderRef = useRef<URDFBuilder | null>(null);
   const rosServiceRef = useRef<ROSService | null>(propsRosService || null);
   const jointMappingsRef = useRef<Map<string, number>>(new Map());
+  const orbitTargetRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 0.15, 0));
+  const initialAutoFitDoneRef = useRef(false);
+  const hasUserInteractedRef = useRef(false);
   
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +46,8 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
   // Initialize Three.js scene and load URDF
   useEffect(() => {
     if (!mountRef.current) return;
+    initialAutoFitDoneRef.current = false;
+    hasUserInteractedRef.current = false;
 
     // Create ROS service if connected and not provided via props
     if (isConnected && !rosServiceRef.current) {
@@ -58,6 +63,7 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
     }
 
     let animationFrameId: number;
+    const cleanupFns: Array<() => void> = [];
     const setupScene = async () => {
       try {
         setLoadingMessage('Setting up scene...');
@@ -124,15 +130,23 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
 
         // Load URDF
         let urdfString: string;
-        
-        if (isConnected && rosServiceRef.current) {
-          setLoadingMessage('Loading URDF from ROS2...');
-          urdfString = await rosServiceRef.current.loadURDF();
-        } else {
+        const loadLocalURDF = async (): Promise<string> => {
           setLoadingMessage('Loading local URDF...');
           const response = await fetch('/data/inmoov-local.urdf');
           if (!response.ok) throw new Error(`Failed to load URDF: ${response.status}`);
-          urdfString = await response.text();
+          return response.text();
+        };
+
+        if (isConnected && rosServiceRef.current) {
+          setLoadingMessage('Loading URDF from ROS2...');
+          try {
+            urdfString = await rosServiceRef.current.loadURDF();
+          } catch (rosError) {
+            console.warn('[URDF Viewer] Failed to load URDF from ROS2, falling back to local URDF:', rosError);
+            urdfString = await loadLocalURDF();
+          }
+        } else {
+          urdfString = await loadLocalURDF();
         }
         
         setLoadingMessage('Parsing URDF...');
@@ -154,6 +168,8 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
         
         scene.add(robotScene);
         urdfBuilderRef.current = builder;
+        const focusObject = getPrimaryFocusObject(robotScene);
+        fitCameraToObject(camera, focusObject, orbitTargetRef.current, 1.5);
 
         // Build joint name to servo ID mapping
         const buildJointMapping = () => {
@@ -197,8 +213,23 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
           camera.aspect = width / height;
           camera.updateProjectionMatrix();
           renderer.setSize(width, height);
+
+          if (!hasUserInteractedRef.current && robotGroupRef.current) {
+            const focus = getPrimaryFocusObject(robotGroupRef.current);
+            fitCameraToObject(camera, focus, orbitTargetRef.current, 1.5);
+          }
         };
         window.addEventListener('resize', handleResize);
+        cleanupFns.push(() => window.removeEventListener('resize', handleResize));
+
+        // Layout changes inside app (without window resize) can affect first framing.
+        if (typeof ResizeObserver !== 'undefined' && mountRef.current) {
+          const resizeObserver = new ResizeObserver(() => {
+            handleResize();
+          });
+          resizeObserver.observe(mountRef.current);
+          cleanupFns.push(() => resizeObserver.disconnect());
+        }
 
         // Animation loop
         const animate = () => {
@@ -208,19 +239,18 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
         animate();
 
         // Setup mouse controls
-        setupControls(renderer, camera, robotScene);
+        const controlsCleanup = setupControls(
+          renderer,
+          camera,
+          () => orbitTargetRef.current,
+          () => {
+            hasUserInteractedRef.current = true;
+          }
+        );
+        cleanupFns.push(controlsCleanup);
 
         setIsLoading(false);
         setLoadingMessage('');
-
-        return () => {
-          window.removeEventListener('resize', handleResize);
-          cancelAnimationFrame(animationFrameId);
-          if (mountRef.current?.contains(renderer.domElement)) {
-            mountRef.current.removeChild(renderer.domElement);
-          }
-          renderer.dispose();
-        };
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         console.error('[URDF Viewer] Error:', errorMessage);
@@ -234,6 +264,13 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
 
     return () => {
       cancelAnimationFrame(animationFrameId);
+      cleanupFns.forEach((cleanup) => cleanup());
+      if (rendererRef.current) {
+        if (mountRef.current?.contains(rendererRef.current.domElement)) {
+          mountRef.current.removeChild(rendererRef.current.domElement);
+        }
+        rendererRef.current.dispose();
+      }
     };
   }, [isConnected, config.rosUrl, onError]);
 
@@ -260,6 +297,37 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
     }
   }, [joints, debugMode]);
 
+  const fitViewToRobot = () => {
+    if (!cameraRef.current || !robotGroupRef.current) return;
+    const focusObject = getPrimaryFocusObject(robotGroupRef.current);
+    fitCameraToObject(cameraRef.current, focusObject, orbitTargetRef.current, 1.5);
+  };
+
+  // Ensure first open matches Fit View exactly (after layout settles).
+  useEffect(() => {
+    if (isLoading || initialAutoFitDoneRef.current) return;
+    if (!cameraRef.current || !robotGroupRef.current) return;
+
+    initialAutoFitDoneRef.current = true;
+    let raf1 = 0;
+    let raf2 = 0;
+    const timer = window.setTimeout(() => {
+      raf1 = window.requestAnimationFrame(() => {
+        raf2 = window.requestAnimationFrame(() => {
+          if (!hasUserInteractedRef.current) {
+            fitViewToRobot();
+          }
+        });
+      });
+    }, 80);
+
+    return () => {
+      window.clearTimeout(timer);
+      if (raf1) window.cancelAnimationFrame(raf1);
+      if (raf2) window.cancelAnimationFrame(raf2);
+    };
+  }, [isLoading]);
+
   return (
     <div className="relative w-full h-full bg-gray-900 rounded-lg border border-gray-700 overflow-hidden">
       <div ref={mountRef} style={{ width: '100%', height: '100%' }} />
@@ -281,7 +349,7 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
       {error && (
         <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-70 z-20">
           <div className="text-center max-w-md bg-gray-800 p-6 rounded">
-            <p className="text-red-500 text-lg font-semibold mb-2">⚠️ Error Loading Model</p>
+            <p className="text-red-500 text-lg font-semibold mb-2">Error Loading Model</p>
             <p className="text-red-300 text-sm mb-4 break-words">{error}</p>
             <p className="text-gray-400 text-xs">Check browser console for details</p>
           </div>
@@ -290,15 +358,14 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
 
       {/* Info Overlay */}
       <div className="absolute bottom-4 left-4 text-xs text-gray-400 z-10">
-        <p>🖱️ Drag to rotate | Scroll to zoom | Right-click to pan</p>
+        <p>ðŸ–±ï¸ Drag to rotate | Scroll to zoom | Right-click to pan</p>
       </div>
 
-      {/* Debug Toggle Button */}
       <button
-        onClick={() => setDebugMode(!debugMode)}
-        className="absolute top-4 right-4 px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 z-10"
+        onClick={fitViewToRobot}
+        className="absolute top-4 left-4 px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 z-10"
       >
-        {debugMode ? '✓ Debug ON' : '○ Debug OFF'}
+        Fit View
       </button>
 
       {/* Debug Info Panel */}
@@ -306,10 +373,11 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
         <div className="absolute top-14 right-4 bg-gray-800 border border-green-500 rounded p-3 z-10 max-w-xs">
           <h3 className="text-green-400 font-bold mb-2 text-sm">Debug Info</h3>
           <div className="text-xs text-gray-300 space-y-1">
-            <p>ROS: {isConnected ? '🟢 Connected' : '🔴 Disconnected'}</p>
+            <p>ROS: {isConnected ? 'Connected' : 'Disconnected'}</p>
             <p>Mode: {isConnected ? 'ROS Streaming' : 'Local Model'}</p>
             <p>Loading: {isLoading ? 'Yes' : 'No'}</p>
             {debugStats && <p>{debugStats}</p>}
+            <p>Press "Fit View" anytime to re-center</p>
           </div>
         </div>
       )}
@@ -323,7 +391,8 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
 function setupControls(
   renderer: THREE.WebGLRenderer,
   camera: THREE.PerspectiveCamera,
-  robotGroup: THREE.Group
+  getOrbitTarget: () => THREE.Vector3,
+  onUserInteraction?: () => void
 ) {
   let isDragging = false;
   let previousMousePosition = { x: 0, y: 0 };
@@ -332,6 +401,7 @@ function setupControls(
 
   const onMouseDown = (e: MouseEvent) => {
     isDragging = true;
+    onUserInteraction?.();
     previousMousePosition = { x: e.clientX, y: e.clientY };
   };
 
@@ -340,19 +410,21 @@ function setupControls(
 
     const deltaX = e.clientX - previousMousePosition.x;
     const deltaY = e.clientY - previousMousePosition.y;
+    const target = getOrbitTarget();
+    const offset = camera.position.clone().sub(target);
 
     // Rotate camera around robot
-    const phi = Math.atan2(camera.position.z, camera.position.x);
-    const theta = Math.acos(camera.position.y / camera.position.length());
-    const radius = camera.position.length();
+    const phi = Math.atan2(offset.z, offset.x);
+    const theta = Math.acos(offset.y / offset.length());
+    const radius = offset.length();
 
     const newPhi = phi + deltaX * 0.01;
     const newTheta = Math.max(0.1, Math.min(Math.PI - 0.1, theta + deltaY * 0.01));
 
-    camera.position.x = radius * Math.sin(newTheta) * Math.cos(newPhi);
-    camera.position.y = radius * Math.cos(newTheta);
-    camera.position.z = radius * Math.sin(newTheta) * Math.sin(newPhi);
-    camera.lookAt(0, 0.15, 0);
+    camera.position.x = target.x + radius * Math.sin(newTheta) * Math.cos(newPhi);
+    camera.position.y = target.y + radius * Math.cos(newTheta);
+    camera.position.z = target.z + radius * Math.sin(newTheta) * Math.sin(newPhi);
+    camera.lookAt(target);
 
     previousMousePosition = { x: e.clientX, y: e.clientY };
   };
@@ -363,13 +435,16 @@ function setupControls(
 
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
+    onUserInteraction?.();
+    const target = getOrbitTarget();
+    const offset = camera.position.clone().sub(target);
 
-    const direction = camera.position.clone().normalize();
-    const currentDist = camera.position.length();
+    const direction = offset.clone().normalize();
+    const currentDist = offset.length();
     const newDist = Math.max(0.1, Math.min(3, currentDist + e.deltaY * 0.0002));
 
-    camera.position.copy(direction.multiplyScalar(newDist));
-    camera.lookAt(0, 0.15, 0);
+    camera.position.copy(target.clone().add(direction.multiplyScalar(newDist)));
+    camera.lookAt(target);
   };
 
   domElement.addEventListener('mousedown', onMouseDown);
@@ -383,6 +458,67 @@ function setupControls(
     domElement.removeEventListener('mouseup', onMouseUp);
     domElement.removeEventListener('wheel', onWheel);
   };
+}
+
+function fitCameraToObject(
+  camera: THREE.PerspectiveCamera,
+  object: THREE.Object3D,
+  orbitTarget: THREE.Vector3,
+  offset = 1.5
+) {
+  const boundingBox = new THREE.Box3().setFromObject(object);
+  if (boundingBox.isEmpty()) return;
+
+  const size = boundingBox.getSize(new THREE.Vector3());
+  const center = boundingBox.getCenter(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z);
+  const fov = THREE.MathUtils.degToRad(camera.fov);
+  const distance = (maxDim / 2) / Math.tan(fov / 2) * offset;
+
+  // Force a front view (InMoov front is along +X in this URDF)
+  const target = center.clone();
+  target.y += size.y * 0.05;
+  const direction = new THREE.Vector3(1, 0.18, 0).normalize();
+  camera.position.copy(target.clone().add(direction.multiplyScalar(distance)));
+  camera.near = Math.max(0.01, distance / 100);
+  camera.far = distance * 100;
+  orbitTarget.copy(target);
+  camera.lookAt(target);
+  camera.updateProjectionMatrix();
+}
+
+function getPrimaryFocusObject(root: THREE.Object3D): THREE.Object3D {
+  const preferredLinkNames = [
+    'torso_link',
+    'chestplate_link',
+    'mid_stomach_link',
+    'head_link',
+    'r_shoulder_link',
+    'l_shoulder_link',
+    'r_forearm_link',
+    'l_forearm_link',
+  ];
+
+  for (const linkName of preferredLinkNames) {
+    const candidate = root.getObjectByName(linkName);
+    if (candidate && hasRenderableGeometry(candidate)) return candidate;
+  }
+
+  return root;
+}
+
+function hasRenderableGeometry(object: THREE.Object3D): boolean {
+  let foundMesh = false;
+  object.traverse((child) => {
+    if (!foundMesh && child instanceof THREE.Mesh) {
+      const geometry = child.geometry as THREE.BufferGeometry;
+      const position = geometry?.attributes?.position;
+      if (position && position.count > 0) {
+        foundMesh = true;
+      }
+    }
+  });
+  return foundMesh;
 }
 
 export default RobotViewer;

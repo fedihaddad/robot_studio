@@ -1,208 +1,519 @@
-<?xml version="1.0"?>
-<robot name="inmoov">
-  <!-- Base/Torso link -->
+﻿<?xml version="1.0"?>
+<robot name="inmoov_local_fixed">
+  <link name="world"/>
+
+  <joint name="fixed" type="fixed">
+    <parent link="world"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
   <link name="base_link">
     <visual>
       <geometry>
-        <mesh filename="package://meshes/torso.stl" scale="0.001 0.001 0.001"/>
+        <cylinder length="0.11" radius="0.26"/>
       </geometry>
-      <material name="white"><color rgba="0.85 0.85 0.85 1"/></material>
+      <origin xyz="0 0 0.055" rpy="0 0 0"/>
     </visual>
   </link>
 
-  <!-- HEAD - Position above torso -->
-  <link name="head_link">
+  <joint name="base_to_pedestal_link" type="fixed">
+    <parent link="base_link"/>
+    <child link="pedestal_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="pedestal_link">
     <visual>
       <geometry>
-        <mesh filename="package://meshes/head.stl" scale="0.001 0.001 0.001"/>
+        <cylinder length="0.94" radius="0.0254"/>
       </geometry>
-      <material name="white"/>
+      <origin xyz="0 0 0.58" rpy="0 0 0"/>
+    </visual>
+  </link>
+
+  <joint name="pedestal_to_mid_stomach_joint" type="fixed">
+    <parent link="pedestal_link"/>
+    <child link="mid_stomach_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="mid_stomach_link">
+    <visual>
+      <geometry><mesh filename="package://meshes/mid_stomach.stl" scale="0.001 0.001 0.001"/></geometry>
+      <origin xyz="0 0 1.152" rpy="0 0 0"/>
+    </visual>
+  </link>
+
+  <joint name="waist_pan_joint" type="revolute">
+    <parent link="mid_stomach_link"/>
+    <child link="top_stomach_link"/>
+    <origin xyz="0 0 1.152" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-0.6" upper="0.6" effort="1000" velocity="1.0"/>
+  </joint>
+
+  <link name="top_stomach_link">
+    <visual>
+      <geometry><mesh filename="package://meshes/top_stomach.stl" scale="0.001 0.001 0.001"/></geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+  </link>
+
+  <joint name="disk_joint" type="fixed">
+    <parent link="top_stomach_link"/>
+    <child link="disk_link"/>
+    <origin xyz="0.046 0 0.09" rpy="0 0 0"/>
+  </joint>
+
+  <link name="disk_link">
+    <visual>
+      <geometry><mesh filename="package://meshes/disk.stl" scale="0.001 0.001 0.001"/></geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+  </link>
+
+  <joint name="waist_roll_joint" type="revolute">
+    <parent link="top_stomach_link"/>
+    <child link="torso_link"/>
+    <origin xyz="0 0 0.11" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-0.5" upper="0.5" effort="1000" velocity="1.0"/>
+  </joint>
+
+  <link name="torso_link">
+    <visual>
+      <geometry><mesh filename="package://meshes/torso.stl" scale="0.001 0.001 0.001"/></geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+  </link>
+
+  <joint name="chestplate_joint" type="fixed">
+    <parent link="torso_link"/>
+    <child link="chestplate_link"/>
+    <origin xyz="0.042 0 0.025" rpy="0 0 0"/>
+  </joint>
+
+  <link name="chestplate_link">
+    <visual>
+      <geometry><mesh filename="package://meshes/chest.stl" scale="0.001 0.001 0.001"/></geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+  </link>
+
+  <joint name="kinect2_joint" type="fixed">
+    <parent link="torso_link"/>
+    <child link="kinect2_link"/>
+    <origin xyz="0 0 0.066" rpy="-1.57 0 -1.57"/>
+  </joint>
+
+  <link name="kinect2_link">
+    <visual>
+      <geometry><mesh filename="package://meshes/kinectone.stl" scale="0.001 0.001 0.001"/></geometry>
+      <origin xyz="0 0 0" rpy="1.57 0 0"/>
+    </visual>
+  </link>
+
+  <link name="head_tilt_link">
+    <visual>
+      <geometry><mesh filename="package://meshes/virtual.stl" scale="0.001 0.001 0.001"/></geometry>
+      <origin xyz="0 0 0" rpy="0 0 3.1415"/>
     </visual>
   </link>
 
   <joint name="head_roll_joint" type="revolute">
-    <parent link="base_link"/>
-    <child link="head_link"/>
-    <origin xyz="0.0 0.0 0.4" rpy="0 0 0"/>
+    <parent link="torso_link"/>
+    <child link="head_tilt_link"/>
+    <origin xyz="-0.0315 -0.001 0.4551" rpy="0 0 3.1415"/>
     <axis xyz="1 0 0"/>
-    <limit lower="-1.57" upper="1.57" effort="10" velocity="1"/>
+    <limit lower="-0.6" upper="0.6" effort="1000" velocity="1.0"/>
   </joint>
 
-  <!-- HEAD DUMMY JOINTS for skeleton -->
-  <link name="head_pan_dummy"><visual><geometry><box size="0.001 0.001 0.001"/></geometry></visual></link>
-  <joint name="head_pan_joint" type="revolute">
-    <parent link="head_link"/><child link="head_pan_dummy"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-    <axis xyz="0 0 1"/><limit lower="-1.57" upper="1.57" effort="5" velocity="1"/>
-  </joint>
-
-  <link name="head_tilt_dummy"><visual><geometry><box size="0.001 0.001 0.001"/></geometry></visual></link>
   <joint name="head_tilt_joint" type="revolute">
-    <parent link="head_link"/><child link="head_tilt_dummy"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-    <axis xyz="0 1 0"/><limit lower="-1.57" upper="1.57" effort="5" velocity="1"/>
+    <parent link="head_tilt_link"/>
+    <child link="head_base_link"/>
+    <origin xyz="0 0 0" rpy="0 0 3.1415"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-0.6" upper="0.6" effort="1000" velocity="1.0"/>
   </joint>
 
-  <!-- JAW -->
-  <link name="jaw_link">
+  <link name="head_base_link">
     <visual>
-      <geometry>
-        <mesh filename="package://meshes/jaw.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="white"/>
+      <geometry><mesh filename="package://meshes/head_base.stl" scale="0.001 0.001 0.001"/></geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+  </link>
+
+  <joint name="head_pan_joint" type="revolute">
+    <parent link="head_base_link"/>
+    <child link="head_link"/>
+    <origin xyz="0 0 0.0245" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/>
+  </joint>
+
+  <link name="head_link">
+    <visual>
+      <geometry><mesh filename="package://meshes/head.stl" scale="0.001 0.001 0.001"/></geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
     </visual>
   </link>
 
   <joint name="jaw_joint" type="revolute">
     <parent link="head_link"/>
     <child link="jaw_link"/>
-    <origin xyz="0.0 0.0 -0.08" rpy="0 0 0"/>
-    <axis xyz="1 0 0"/>
-    <limit lower="0" upper="0.6" effort="5" velocity="1"/>
-  </joint>
-
-  <!-- LEFT SHOULDER -->
-  <link name="l_shoulder_link">
-    <visual>
-      <geometry>
-        <mesh filename="package://meshes/l_shoulder.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="white"/>
-    </visual>
-  </link>
-
-  <joint name="l_shoulder_out_joint" type="revolute">
-    <parent link="base_link"/>
-    <child link="l_shoulder_link"/>
-    <origin xyz="0.2 0.0 0.2" rpy="0 0 0"/>
+    <origin xyz="0.0375 0.0005 0.0437" rpy="0 0.09 0"/>
     <axis xyz="0 1 0"/>
-    <limit lower="-1.57" upper="1.57" effort="15" velocity="1"/>
+    <limit lower="0" upper="0.8" effort="1000" velocity="1.0"/>
   </joint>
 
-  <!-- LEFT UPPER ARM -->
-  <link name="l_upper_arm_link">
+  <link name="jaw_link">
     <visual>
-      <geometry>
-        <mesh filename="package://meshes/l_forearm.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="white"/>
+      <geometry><mesh filename="package://meshes/jaw.stl" scale="0.001 0.001 0.001"/></geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
     </visual>
   </link>
 
-  <joint name="l_shoulder_lift_joint" type="revolute">
-    <parent link="l_shoulder_link"/>
-    <child link="l_upper_arm_link"/>
-    <origin xyz="0.1 0.0 0.0" rpy="0 0 0"/>
+  <joint name="skull_joint" type="fixed">
+    <parent link="head_link"/>
+    <child link="skull_link"/>
+    <origin xyz="0.044 0 -0.0245" rpy="0 0 0"/>
+  </joint>
+
+  <link name="skull_link">
+    <visual>
+      <geometry><mesh filename="package://meshes/skull.stl" scale="0.001 0.001 0.001"/></geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+  </link>
+
+  <joint name="left_ear_joint" type="fixed">
+    <parent link="head_link"/>
+    <child link="left_ear_link"/>
+    <origin xyz="0.035 0.056 0.0437" rpy="0 0 0"/>
+  </joint>
+
+  <link name="left_ear_link">
+    <visual>
+      <geometry><mesh filename="package://meshes/earleftv1.stl" scale="0.001 0.001 0.001"/></geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+  </link>
+
+  <joint name="right_ear_joint" type="fixed">
+    <parent link="head_link"/>
+    <child link="right_ear_link"/>
+    <origin xyz="0.035 -0.056 0.0437" rpy="0 0 0"/>
+  </joint>
+
+  <link name="right_ear_link">
+    <visual>
+      <geometry><mesh filename="package://meshes/earrightv1.stl" scale="0.001 0.001 0.001"/></geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+  </link>
+
+  <joint name="face_joint" type="fixed">
+    <parent link="skull_link"/>
+    <child link="face_link"/>
+    <origin xyz="0.0637 0 0.079" rpy="0 0 0"/>
+  </joint>
+
+  <link name="face_link">
+    <visual>
+      <geometry><mesh filename="package://meshes/face.stl" scale="0.001 0.001 0.001"/></geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+  </link>
+
+  <joint name="eyes_tilt_joint" type="revolute">
+    <parent link="face_link"/>
+    <child link="eyesupport_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-0.5" upper="0.5" effort="1000" velocity="1.0"/>
+  </joint>
+
+  <link name="eyesupport_link">
+    <visual>
+      <geometry><mesh filename="package://meshes/eyesupport.stl" scale="0.001 0.001 0.001"/></geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+  </link>
+
+  <joint name="eyes_pan_joint" type="revolute">
+    <parent link="eyesupport_link"/>
+    <child link="r_eyesupport_link"/>
+    <origin xyz="0 0.033 -0.0036" rpy="0 0 0"/>
     <axis xyz="0 0 1"/>
-    <limit lower="-1.57" upper="1.57" effort="15" velocity="1"/>
+    <limit lower="-0.5" upper="0.5" effort="1000" velocity="1.0"/>
   </joint>
 
-  <!-- LEFT FOREARM -->
-  <link name="l_forearm_link">
+  <link name="r_eyesupport_link">
     <visual>
-      <geometry>
-        <mesh filename="package://meshes/l_forearm.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="white"/>
+      <geometry><mesh filename="package://meshes/r_eyesupport.stl" scale="0.001 0.001 0.001"/></geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
     </visual>
   </link>
 
-  <joint name="l_elbow_flex_joint" type="revolute">
-    <parent link="l_upper_arm_link"/>
-    <child link="l_forearm_link"/>
-    <origin xyz="0.18 0.0 0.0" rpy="0 0 0"/>
+  <joint name="r_camera_joint" type="fixed">
+    <parent link="r_eyesupport_link"/>
+    <child link="r_camera_link"/>
+    <origin xyz="-0.001 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="r_camera_link"><visual><geometry><mesh filename="package://meshes/camera.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+
+  <joint name="r_eye_joint" type="fixed">
+    <parent link="r_eyesupport_link"/>
+    <child link="r_eye_link"/>
+    <origin xyz="0.003 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="r_eye_link"><visual><geometry><mesh filename="package://meshes/eye.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+
+  <joint name="r_iris_joint" type="fixed">
+    <parent link="r_eyesupport_link"/>
+    <child link="r_iris_link"/>
+    <origin xyz="0.0061 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="r_iris_link"><visual><geometry><mesh filename="package://meshes/iris.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+
+  <joint name="l_eye_pan_joint" type="revolute">
+    <parent link="eyesupport_link"/>
+    <child link="l_eyesupport_link"/>
+    <origin xyz="0 -0.033 -0.0036" rpy="0 0 0"/>
     <axis xyz="0 0 1"/>
-    <limit lower="0" upper="2.09" effort="10" velocity="1"/>
+    <limit lower="-0.5" upper="0.5" effort="1000" velocity="1.0"/>
   </joint>
 
-  <!-- LEFT HAND -->
-  <link name="l_hand_link">
+  <link name="l_eyesupport_link">
     <visual>
-      <geometry>
-        <mesh filename="package://meshes/l_hand.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="white"/>
+      <geometry><mesh filename="package://meshes/l_eyesupport.stl" scale="0.001 0.001 0.001"/></geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
     </visual>
   </link>
 
-  <joint name="l_wrist_roll_joint" type="revolute">
-    <parent link="l_forearm_link"/>
-    <child link="l_hand_link"/>
-    <origin xyz="0.18 0.0 0.0" rpy="0 0 0"/>
-    <axis xyz="1 0 0"/>
-    <limit lower="-3.14" upper="3.14" effort="10" velocity="1"/>
+  <joint name="l_camera_joint" type="fixed">
+    <parent link="l_eyesupport_link"/>
+    <child link="l_camera_link"/>
+    <origin xyz="-0.001 0 0" rpy="0 0 0"/>
   </joint>
 
-  <!-- RIGHT SHOULDER -->
-  <link name="r_shoulder_link">
-    <visual>
-      <geometry>
-        <mesh filename="package://meshes/r_shoulder.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="white"/>
-    </visual>
-  </link>
+  <link name="l_camera_link"><visual><geometry><mesh filename="package://meshes/camera.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+
+  <joint name="l_eye_joint" type="fixed">
+    <parent link="l_eyesupport_link"/>
+    <child link="l_eye_link"/>
+    <origin xyz="0.003 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="l_eye_link"><visual><geometry><mesh filename="package://meshes/eye.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+
+  <joint name="l_iris_joint" type="fixed">
+    <parent link="l_eyesupport_link"/>
+    <child link="l_iris_link"/>
+    <origin xyz="0.0061 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="l_iris_link"><visual><geometry><mesh filename="package://meshes/iris.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
 
   <joint name="r_shoulder_out_joint" type="revolute">
-    <parent link="base_link"/>
-    <child link="r_shoulder_link"/>
-    <origin xyz="-0.2 0.0 0.2" rpy="0 0 0"/>
-    <axis xyz="0 1 0"/>
-    <limit lower="-1.57" upper="1.57" effort="15" velocity="1"/>
+    <parent link="torso_link"/>
+    <child link="r_shoulder_base_link"/>
+    <origin xyz="0 -0.143 0.298" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/>
   </joint>
 
-  <!-- RIGHT UPPER ARM -->
-  <link name="r_upper_arm_link">
-    <visual>
-      <geometry>
-        <mesh filename="package://meshes/r_forearm.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="white"/>
-    </visual>
-  </link>
+  <link name="r_shoulder_base_link"><visual><geometry><mesh filename="package://meshes/r_shoulder_base.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
 
   <joint name="r_shoulder_lift_joint" type="revolute">
-    <parent link="r_shoulder_link"/>
-    <child link="r_upper_arm_link"/>
-    <origin xyz="-0.1 0.0 0.0" rpy="0 0 0"/>
-    <axis xyz="0 0 1"/>
-    <limit lower="-1.57" upper="1.57" effort="15" velocity="1"/>
+    <parent link="r_shoulder_base_link"/>
+    <child link="r_shoulder_link"/>
+    <origin xyz="0 -0.012 -0.04" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-1.57" upper="1.57" effort="1000" velocity="1.0"/>
   </joint>
 
-  <!-- RIGHT FOREARM -->
-  <link name="r_forearm_link">
-    <visual>
-      <geometry>
-        <mesh filename="package://meshes/r_forearm.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="white"/>
-    </visual>
-  </link>
+  <link name="r_shoulder_link"><visual><geometry><mesh filename="package://meshes/r_shoulder.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+
+  <joint name="r_upper_arm_roll_joint" type="revolute">
+    <parent link="r_shoulder_link"/>
+    <child link="r_bicep_link"/>
+    <origin xyz="0 -0.066 -0.060" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1.57" upper="1.57" effort="1000" velocity="1.0"/>
+  </joint>
+
+  <link name="r_bicep_link"><visual><geometry><mesh filename="package://meshes/bicep.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+
+  <joint name="r_bicepcover_joint" type="fixed">
+    <parent link="r_bicep_link"/>
+    <child link="r_bicepcover_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="r_bicepcover_link"><visual><geometry><mesh filename="package://meshes/bicepcover.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
 
   <joint name="r_elbow_flex_joint" type="revolute">
-    <parent link="r_upper_arm_link"/>
+    <parent link="r_bicep_link"/>
     <child link="r_forearm_link"/>
-    <origin xyz="-0.18 0.0 0.0" rpy="0 0 0"/>
-    <axis xyz="0 0 1"/>
-    <limit lower="0" upper="2.09" effort="10" velocity="1"/>
+    <origin xyz="-0.0278 0 -0.2235" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="0" upper="2.09" effort="1000" velocity="1.0"/>
   </joint>
 
-  <!-- RIGHT HAND -->
-  <link name="r_hand_link">
-    <visual>
-      <geometry>
-        <mesh filename="package://meshes/r_hand.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="white"/>
-    </visual>
-  </link>
+  <link name="r_forearm_link"><visual><geometry><mesh filename="package://meshes/r_forearm.stl" scale="0.001 0.001 0.001"/></geometry><origin xyz="0.001 0 0" rpy="0 0 0"/></visual></link>
 
   <joint name="r_wrist_roll_joint" type="revolute">
     <parent link="r_forearm_link"/>
     <child link="r_hand_link"/>
-    <origin xyz="-0.18 0.0 0.0" rpy="0 0 0"/>
-    <axis xyz="1 0 0"/>
-    <limit lower="-3.14" upper="3.14" effort="10" velocity="1"/>
+    <origin xyz="-0.0144 0.01 -0.2885" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14" upper="3.14" effort="1000" velocity="1.0"/>
   </joint>
 
+  <link name="r_hand_link"><visual><geometry><mesh filename="package://meshes/r_hand.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+
+  <joint name="l_shoulder_out_joint" type="revolute">
+    <parent link="torso_link"/>
+    <child link="l_shoulder_base_link"/>
+    <origin xyz="0 0.143 0.298" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/>
+  </joint>
+
+  <link name="l_shoulder_base_link"><visual><geometry><mesh filename="package://meshes/l_shoulder_base.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+
+  <joint name="l_shoulder_lift_joint" type="revolute">
+    <parent link="l_shoulder_base_link"/>
+    <child link="l_shoulder_link"/>
+    <origin xyz="0 0.012 -0.04" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-1.57" upper="1.57" effort="1000" velocity="1.0"/>
+  </joint>
+
+  <link name="l_shoulder_link"><visual><geometry><mesh filename="package://meshes/l_shoulder.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+
+  <joint name="l_upper_arm_roll_joint" type="revolute">
+    <parent link="l_shoulder_link"/>
+    <child link="l_bicep_link"/>
+    <origin xyz="0 0.066 -0.060" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1.57" upper="1.57" effort="1000" velocity="1.0"/>
+  </joint>
+
+  <link name="l_bicep_link"><visual><geometry><mesh filename="package://meshes/bicep.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+
+  <joint name="l_bicepcover_joint" type="fixed">
+    <parent link="l_bicep_link"/>
+    <child link="l_bicepcover_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="l_bicepcover_link"><visual><geometry><mesh filename="package://meshes/bicepcover.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+
+  <joint name="l_elbow_flex_joint" type="revolute">
+    <parent link="l_bicep_link"/>
+    <child link="l_forearm_link"/>
+    <origin xyz="-0.0278 0 -0.2235" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="0" upper="2.09" effort="1000" velocity="1.0"/>
+  </joint>
+
+  <link name="l_forearm_link"><visual><geometry><mesh filename="package://meshes/l_forearm.stl" scale="0.001 0.001 0.001"/></geometry><origin xyz="-0.001 0 0" rpy="0 0 0"/></visual></link>
+
+  <joint name="l_wrist_roll_joint" type="revolute">
+    <parent link="l_forearm_link"/>
+    <child link="l_hand_link"/>
+    <origin xyz="-0.0144 -0.01 -0.2885" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14" upper="3.14" effort="1000" velocity="1.0"/>
+  </joint>
+
+  <link name="l_hand_link"><visual><geometry><mesh filename="package://meshes/l_hand.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+
+  <!-- Right hand fingers -->
+  <link name="r_thumb1_link"><visual><geometry><mesh filename="package://meshes/r_thumb5_1.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="r_thumb2_link"><visual><geometry><mesh filename="package://meshes/thumb5_2.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="r_thumb3_link"><visual><geometry><mesh filename="package://meshes/thumb5_3.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="r_index1_link"><visual><geometry><mesh filename="package://meshes/index3_1.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="r_index2_link"><visual><geometry><mesh filename="package://meshes/index3_2.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="r_index3_link"><visual><geometry><mesh filename="package://meshes/index3_3.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="r_middle1_link"><visual><geometry><mesh filename="package://meshes/middle3_1.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="r_middle2_link"><visual><geometry><mesh filename="package://meshes/middle3_2.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="r_middle3_link"><visual><geometry><mesh filename="package://meshes/middle3_3.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="r_ring1_link"><visual><geometry><mesh filename="package://meshes/r_ring3_1.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="r_ring2_link"><visual><geometry><mesh filename="package://meshes/ring3_2.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="r_ring3_link"><visual><geometry><mesh filename="package://meshes/ring3_3.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="r_ring4_link"><visual><geometry><mesh filename="package://meshes/ring3_4.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="r_pinky1_link"><visual><geometry><mesh filename="package://meshes/r_pinky3_1.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="r_pinky2_link"><visual><geometry><mesh filename="package://meshes/pinky3_2.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="r_pinky3_link"><visual><geometry><mesh filename="package://meshes/pinky3_3.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="r_pinky4_link"><visual><geometry><mesh filename="package://meshes/pinky3_4.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+
+  <joint name="r_thumb1_joint" type="revolute"><parent link="r_hand_link"/><child link="r_thumb1_link"/><origin xyz="0 0.029 -0.0577" rpy="0.1 0 0"/><axis xyz="0 0 1"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+  <joint name="r_thumb_joint" type="revolute"><parent link="r_thumb1_link"/><child link="r_thumb2_link"/><origin xyz="-0.00052 0.02725 -0.013" rpy="0.825 -0.1 0.3"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+  <joint name="r_thumb3_joint" type="revolute"><parent link="r_thumb2_link"/><child link="r_thumb3_link"/><origin xyz="0 0 -0.035" rpy="0 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+
+  <joint name="r_index1_joint" type="revolute"><parent link="r_hand_link"/><child link="r_index1_link"/><origin xyz="-0.0015 0.0342 -0.119" rpy="0.1 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+  <joint name="r_index_joint" type="revolute"><parent link="r_index1_link"/><child link="r_index2_link"/><origin xyz="0 0.001 -0.03595" rpy="0 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+  <joint name="r_index3_joint" type="revolute"><parent link="r_index2_link"/><child link="r_index3_link"/><origin xyz="0 0 -0.024" rpy="0 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+
+  <joint name="r_middle1_joint" type="revolute"><parent link="r_hand_link"/><child link="r_middle1_link"/><origin xyz="-0.00175 0.007 -0.12325" rpy="0 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+  <joint name="r_middle_joint" type="revolute"><parent link="r_middle1_link"/><child link="r_middle2_link"/><origin xyz="0 0 -0.0389" rpy="0 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+  <joint name="r_middle3_joint" type="revolute"><parent link="r_middle2_link"/><child link="r_middle3_link"/><origin xyz="0 0.0005 -0.0259" rpy="0 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+
+  <joint name="r_ring1_joint" type="revolute"><parent link="r_hand_link"/><child link="r_ring1_link"/><origin xyz="0 -0.00705 -0.0794" rpy="0.7 0 0"/><axis xyz="0 0 1"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+  <joint name="r_ring_joint" type="revolute"><parent link="r_ring1_link"/><child link="r_ring2_link"/><origin xyz="0.00126 -0.0351 -0.0166" rpy="-0.7775 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+  <joint name="r_ring3_joint" type="revolute"><parent link="r_ring2_link"/><child link="r_ring3_link"/><origin xyz="0 0.0005 -0.0345" rpy="0 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+  <joint name="r_ring4_joint" type="revolute"><parent link="r_ring3_link"/><child link="r_ring4_link"/><origin xyz="0 0.0004 -0.0229" rpy="0 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+
+  <joint name="r_pinky1_joint" type="revolute"><parent link="r_hand_link"/><child link="r_pinky1_link"/><origin xyz="0 -0.0270 -0.0555" rpy="0.7 0 0"/><axis xyz="0 0 1"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+  <joint name="r_pinky_joint" type="revolute"><parent link="r_pinky1_link"/><child link="r_pinky2_link"/><origin xyz="0 -0.046 -0.0228" rpy="-0.93 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+  <joint name="r_pinky3_joint" type="revolute"><parent link="r_pinky2_link"/><child link="r_pinky3_link"/><origin xyz="0 0.0005 -0.031" rpy="0 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+  <joint name="r_pinky4_joint" type="revolute"><parent link="r_pinky3_link"/><child link="r_pinky4_link"/><origin xyz="0 0.0004 -0.0208" rpy="0 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+
+  <!-- Left hand fingers -->
+  <link name="l_thumb1_link"><visual><geometry><mesh filename="package://meshes/l_thumb5_1.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="l_thumb2_link"><visual><geometry><mesh filename="package://meshes/thumb5_2.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="l_thumb3_link"><visual><geometry><mesh filename="package://meshes/thumb5_3.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="l_index1_link"><visual><geometry><mesh filename="package://meshes/index3_1.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="l_index2_link"><visual><geometry><mesh filename="package://meshes/index3_2.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="l_index3_link"><visual><geometry><mesh filename="package://meshes/index3_3.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="l_middle1_link"><visual><geometry><mesh filename="package://meshes/middle3_1.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="l_middle2_link"><visual><geometry><mesh filename="package://meshes/middle3_2.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="l_middle3_link"><visual><geometry><mesh filename="package://meshes/middle3_3.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="l_ring1_link"><visual><geometry><mesh filename="package://meshes/l_ring3_1.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="l_ring2_link"><visual><geometry><mesh filename="package://meshes/ring3_2.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="l_ring3_link"><visual><geometry><mesh filename="package://meshes/ring3_3.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="l_ring4_link"><visual><geometry><mesh filename="package://meshes/ring3_4.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="l_pinky1_link"><visual><geometry><mesh filename="package://meshes/l_pinky3_1.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="l_pinky2_link"><visual><geometry><mesh filename="package://meshes/pinky3_2.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="l_pinky3_link"><visual><geometry><mesh filename="package://meshes/pinky3_3.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="l_pinky4_link"><visual><geometry><mesh filename="package://meshes/pinky3_4.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+
+  <joint name="l_thumb1_joint" type="revolute"><parent link="l_hand_link"/><child link="l_thumb1_link"/><origin xyz="0 -0.029 -0.0577" rpy="-0.1 0 0"/><axis xyz="0 0 1"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+  <joint name="l_thumb_joint" type="revolute"><parent link="l_thumb1_link"/><child link="l_thumb2_link"/><origin xyz="-0.00052 -0.02725 -0.013" rpy="-0.825 -0.1 -0.3"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+  <joint name="l_thumb3_joint" type="revolute"><parent link="l_thumb2_link"/><child link="l_thumb3_link"/><origin xyz="0 0 -0.035" rpy="0 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+
+  <joint name="l_index1_joint" type="revolute"><parent link="l_hand_link"/><child link="l_index1_link"/><origin xyz="-0.0015 -0.0342 -0.119" rpy="-0.1 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+  <joint name="l_index_joint" type="revolute"><parent link="l_index1_link"/><child link="l_index2_link"/><origin xyz="0 0.001 -0.03595" rpy="0 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+  <joint name="l_index3_joint" type="revolute"><parent link="l_index2_link"/><child link="l_index3_link"/><origin xyz="0 0 -0.024" rpy="0 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+
+  <joint name="l_middle1_joint" type="revolute"><parent link="l_hand_link"/><child link="l_middle1_link"/><origin xyz="-0.00175 -0.007 -0.12325" rpy="0 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+  <joint name="l_middle_joint" type="revolute"><parent link="l_middle1_link"/><child link="l_middle2_link"/><origin xyz="0 0 -0.0389" rpy="0 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+  <joint name="l_middle3_joint" type="revolute"><parent link="l_middle2_link"/><child link="l_middle3_link"/><origin xyz="0 0.0005 -0.0259" rpy="0 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+
+  <joint name="l_ring1_joint" type="revolute"><parent link="l_hand_link"/><child link="l_ring1_link"/><origin xyz="0 0.00705 -0.0794" rpy="-0.7 0 0"/><axis xyz="0 0 1"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+  <joint name="l_ring_joint" type="revolute"><parent link="l_ring1_link"/><child link="l_ring2_link"/><origin xyz="0.00126 0.0351 -0.0166" rpy="0.7775 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+  <joint name="l_ring3_joint" type="revolute"><parent link="l_ring2_link"/><child link="l_ring3_link"/><origin xyz="0 0.0005 -0.0345" rpy="0 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+  <joint name="l_ring4_joint" type="revolute"><parent link="l_ring3_link"/><child link="l_ring4_link"/><origin xyz="0 0.0004 -0.0229" rpy="0 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+
+  <joint name="l_pinky1_joint" type="revolute"><parent link="l_hand_link"/><child link="l_pinky1_link"/><origin xyz="0 0.0270 -0.0555" rpy="-0.7 0 0"/><axis xyz="0 0 1"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+  <joint name="l_pinky_joint" type="revolute"><parent link="l_pinky1_link"/><child link="l_pinky2_link"/><origin xyz="0 0.046 -0.0228" rpy="0.93 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+  <joint name="l_pinky3_joint" type="revolute"><parent link="l_pinky2_link"/><child link="l_pinky3_link"/><origin xyz="0 0.0005 -0.031" rpy="0 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+  <joint name="l_pinky4_joint" type="revolute"><parent link="l_pinky3_link"/><child link="l_pinky4_link"/><origin xyz="0 0.0004 -0.0208" rpy="0 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
 </robot>

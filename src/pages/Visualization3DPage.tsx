@@ -45,6 +45,7 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
 
   const headServoIds = getHeadServoIds();
   const armServoIds = getArmServoIds();
+  const armServoIdsWithoutLeftWrist = armServoIds.filter((id) => id !== 16);
 
   return (
     <div className="p-6 h-full flex flex-col gap-6">
@@ -157,7 +158,52 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
               </div>
             ) : (
               <div className="space-y-3">
-                {armServoIds.map((servoId) => {
+                {/* Dedicated hand rotation controls */}
+                <div className="bg-gray-700/40 border border-gray-600 rounded-lg p-3 mb-2">
+                  <p className="text-xs font-semibold text-gray-200 mb-2">Hand Rotation</p>
+
+                  <div className="mb-3">
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-xs font-medium text-gray-300">
+                        Right Wrist (Servo 11)
+                      </label>
+                      <span className="text-xs text-blue-400 font-semibold">
+                        {(servoStates[11]?.angle ?? 0).toFixed(1)}°
+                      </span>
+                    </div>
+                    <ServoSlider
+                      id={11}
+                      label=""
+                      value={servoStates[11]?.angle ?? 0}
+                      min={-180}
+                      max={180}
+                      onChange={(value) => handleServoChange(11, value)}
+                      disabled={!isConnected}
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-xs font-medium text-gray-300">
+                        Left Wrist (Servo 16)
+                      </label>
+                      <span className="text-xs text-blue-400 font-semibold">
+                        {(servoStates[16]?.angle ?? 0).toFixed(1)}°
+                      </span>
+                    </div>
+                    <ServoSlider
+                      id={16}
+                      label=""
+                      value={servoStates[16]?.angle ?? 0}
+                      min={-180}
+                      max={180}
+                      onChange={(value) => handleServoChange(16, value)}
+                      disabled={!isConnected}
+                    />
+                  </div>
+                </div>
+
+                {armServoIdsWithoutLeftWrist.map((servoId) => {
                   const config = getServoConfig(servoId);
                   const currentAngle = servoStates[servoId]?.angle || config.default;
                   
