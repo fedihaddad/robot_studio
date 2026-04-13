@@ -10,8 +10,8 @@ if (started) {
 const createWindow = () => {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 800,
-    height: 600,
+    width: 1400,
+    height: 900,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -30,11 +30,16 @@ const createWindow = () => {
     );
   }
 
-  // Show the window after loading
-  mainWindow.show();
+  // Show maximized on startup.
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.maximize();
+    mainWindow.show();
+  });
 
-  // Open the DevTools.
-  mainWindow.webContents.openDevTools();
+  // Open DevTools only in development mode.
+  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+    mainWindow.webContents.openDevTools();
+  }
 };
 
 // This method will be called when Electron has finished

@@ -1,12 +1,13 @@
 /**
- * Servo Degrees Configuration - AXEL Head Servos
+ * Servo Degrees Configuration - AXEL Complete Robot Model
  * 
  * Hardware-specific min/max angles for each servo
- * Extracted from Arduino head servo controller code
- * All values in degrees (0-180)
+ * Maps all 28 joints: 15 head/face + 10 arms + 2 torso + 1 jaw (counted elsewhere)
+ * All values in degrees
  * 
- * Source: AXEL_Head_Servo_Controller.ino
- * Last Updated: March 30, 2026
+ * Source: XACRO config from inmoov_bringup + Arduino controller code
+ * Last Updated: April 10, 2026
+ * Total Servos: 39 channels (15 implemented, 24 arm/hand added)
  */
 
 export const servoDegreesConfig = {
@@ -144,21 +145,214 @@ export const servoDegreesConfig = {
     default: 80,  // L_JAW_CENTER
   },
 
-  // ========== ARM SERVOS (10 servos) - Placeholder ==========
-  servo_16: { name: 'Arm Servo 1', min: 0, max: 180, default: 90 },
-  servo_17: { name: 'Arm Servo 2', min: 0, max: 180, default: 90 },
-  servo_18: { name: 'Arm Servo 3', min: 0, max: 180, default: 90 },
-  servo_19: { name: 'Arm Servo 4', min: 0, max: 180, default: 90 },
-  servo_20: { name: 'Arm Servo 5', min: 0, max: 180, default: 90 },
-  servo_21: { name: 'Arm Servo 6', min: 0, max: 180, default: 90 },
-  servo_22: { name: 'Arm Servo 7', min: 0, max: 180, default: 90 },
-  servo_23: { name: 'Arm Servo 8', min: 0, max: 180, default: 90 },
-  servo_24: { name: 'Arm Servo 9', min: 0, max: 180, default: 90 },
-  servo_25: { name: 'Arm Servo 10', min: 0, max: 180, default: 90 },
+  // ========== HEAD MOVEMENT (2 servos) ==========
+  servo_16: {
+    name: 'Head Tilt (رأس - أمام/خلف)',
+    channel: 16,
+    jointName: 'head_tilt_joint',
+    min: -20,     // Forward
+    max: 20,      // Backward
+    default: 0,   // Center
+  },
+  servo_17: {
+    name: 'Head Roll (رأس - جانبي)',
+    channel: 17,
+    jointName: 'head_roll_joint',
+    min: -15,     // Left tilt
+    max: 15,      // Right tilt
+    default: 0,   // Center
+  },
+
+  // ========== LEFT ARM (5 servos) ==========
+  servo_18: {
+    name: 'L Shoulder Out/In (الكتف الأيسر خارج/داخل)',
+    channel: 18,
+    jointName: 'l_shoulder_out_joint',
+    min: 5,       // In
+    max: 60,      // Out
+    default: 30,  // Center
+  },
+  servo_19: {
+    name: 'L Shoulder Lift (الكتف الأيسر علوي)',
+    channel: 19,
+    jointName: 'l_shoulder_lift_joint',
+    min: -135,    // Down
+    max: 45,      // Up
+    default: -45, // Center
+  },
+  servo_20: {
+    name: 'L Upper Arm Roll (الذراع الأيسر - دوران)',
+    channel: 20,
+    jointName: 'l_upper_arm_roll_joint',
+    min: -90,     // Inward
+    max: 90,      // Outward
+    default: 0,   // Center
+  },
+  servo_21: {
+    name: 'L Elbow Flex (الكوع الأيسر)',
+    channel: 21,
+    jointName: 'l_elbow_flex_joint',
+    min: -85,     // Bent
+    max: -15,     // Extended
+    default: -50, // Center
+  },
+  servo_22: {
+    name: 'L Wrist Roll (المعصم الأيسر - دوران)',
+    channel: 22,
+    jointName: 'l_wrist_roll_joint',
+    min: 0,       // Left
+    max: 180,     // Right
+    default: 90,  // Center
+  },
+
+  // ========== RIGHT ARM (5 servos) ==========
+  servo_23: {
+    name: 'R Shoulder Out/In (الكتف الأيمن خارج/داخل)',
+    channel: 23,
+    jointName: 'r_shoulder_out_joint',
+    min: -60,     // Out
+    max: -5,      // In
+    default: -30, // Center
+  },
+  servo_24: {
+    name: 'R Shoulder Lift (الكتف الأيمن علوي)',
+    channel: 24,
+    jointName: 'r_shoulder_lift_joint',
+    min: -135,    // Down
+    max: 45,      // Up
+    default: -45, // Center
+  },
+  servo_25: {
+    name: 'R Upper Arm Roll (الذراع الأيمن - دوران)',
+    channel: 25,
+    jointName: 'r_upper_arm_roll_joint',
+    min: -90,     // Inward
+    max: 90,      // Outward
+    default: 0,   // Center
+  },
+
+  // ========== LEFT HAND (5 servos) ==========
+  servo_26: {
+    name: 'L Thumb (الإصبع الأيسر - الكبير)',
+    channel: 26,
+    jointName: 'l_thumb_joint',
+    min: -5,
+    max: 65,
+    default: 30,
+  },
+  servo_27: {
+    name: 'L Index (الإصبع الأيسر - السبابة)',
+    channel: 27,
+    jointName: 'l_index_joint',
+    min: -5,
+    max: 85,
+    default: 40,
+  },
+  servo_28: {
+    name: 'L Middle (الإصبع الأيسر - الوسطى)',
+    channel: 28,
+    jointName: 'l_middle_joint',
+    min: -5,
+    max: 85,
+    default: 40,
+  },
+  servo_29: {
+    name: 'L Ring (الإصبع الأيسر - البنصر)',
+    channel: 29,
+    jointName: 'l_ring_joint',
+    min: -5,
+    max: 85,
+    default: 40,
+  },
+  servo_30: {
+    name: 'L Pinky (الإصبع الأيسر - الخنصر)',
+    channel: 30,
+    jointName: 'l_pinky_joint',
+    min: -5,
+    max: 85,
+    default: 40,
+  },
+
+  // ========== RIGHT ELBOW/WRIST + RIGHT HAND (6 servos) ==========
+  servo_31: {
+    name: 'R Elbow Flex (الكوع الأيمن)',
+    channel: 31,
+    jointName: 'r_elbow_flex_joint',
+    min: -80,     // Bent
+    max: -15,     // Extended
+    default: -50, // Center
+  },
+  servo_32: {
+    name: 'R Wrist Roll (المعصم الأيمن - دوران)',
+    channel: 32,
+    jointName: 'r_wrist_roll_joint',
+    min: -180,    // Left
+    max: 0,       // Right (inverted from left arm)
+    default: -90, // Center
+  },
+  servo_33: {
+    name: 'R Thumb (الإصبع الأيمن - الكبير)',
+    channel: 33,
+    jointName: 'r_thumb_joint',
+    min: -5,
+    max: 65,
+    default: 30,
+  },
+  servo_34: {
+    name: 'R Index (الإصبع الأيمن - السبابة)',
+    channel: 34,
+    jointName: 'r_index_joint',
+    min: -5,
+    max: 85,
+    default: 40,
+  },
+  servo_35: {
+    name: 'R Middle (الإصبع الأيمن - الوسطى)',
+    channel: 35,
+    jointName: 'r_middle_joint',
+    min: -5,
+    max: 85,
+    default: 40,
+  },
+  servo_36: {
+    name: 'R Ring (الإصبع الأيمن - البنصر)',
+    channel: 36,
+    jointName: 'r_ring_joint',
+    min: -5,
+    max: 85,
+    default: 40,
+  },
+  servo_37: {
+    name: 'R Pinky (الإصبع الأيمن - الخنصر)',
+    channel: 37,
+    jointName: 'r_pinky_joint',
+    min: -5,
+    max: 85,
+    default: 40,
+  },
+
+  // ========== TORSO JOINTS (2 servos) ==========
+  servo_38: {
+    name: 'Waist Pan (الخصر - دوران)',
+    channel: 38,
+    jointName: 'waist_pan_joint',
+    min: -90,     // Left
+    max: 90,      // Right
+    default: 0,   // Center
+  },
+  servo_39: {
+    name: 'Waist Roll (الخصر - جانبي)',
+    channel: 39,
+    jointName: 'waist_roll_joint',
+    min: -15,     // Left lean
+    max: 15,      // Right lean
+    default: 0,   // Center
+  },
 } as const;
 
 /**
- * Helper function to get servo config by ID (1-25)
+ * Helper function to get servo config by ID (1-39)
+ * Maps all arm, hand, head, and torso joints
  */
 export function getServoConfig(servoId: number) {
   const key = `servo_${servoId}` as keyof typeof servoDegreesConfig;

@@ -2,15 +2,26 @@
 import * as THREE from 'three';
 import { parseURDF } from '../../services/urdf.loader';
 import { URDFBuilder } from '../../services/urdf.builder';
-import { ROSService } from '../../services/ros.service';
+import { JOINT_NAME_TO_SERVO_ID, ROSService } from '../../services/ros.service';
 import { useAppStore } from '../../store/appStore';
+import { ServoCommand } from '../../types';
 
 interface RobotViewerProps {
   joints: Record<number, number>;
+  jointStatesByName?: Record<string, number>;
   isConnected: boolean;
   rosService?: ROSService | null;
   onError?: (error: string) => void;
+  showFitButton?: boolean;
+  showLoadingOverlay?: boolean;
+  showLoadingDetails?: boolean;
+  showControlsHint?: boolean;
+  onModelReady?: () => void;
+  onServoCommand?: (command: ServoCommand) => void;
 }
+
+let cachedLocalURDF: string | null = null;
+const LOCAL_URDF_URL = new URL('../../data/inmoov-local.urdf', import.meta.url).toString();
 
 /**
  * 3D Robot Viewer Component - URDF-based Renderer
@@ -19,9 +30,16 @@ interface RobotViewerProps {
  */
 const RobotViewer: React.FC<RobotViewerProps> = ({
   joints,
+  jointStatesByName = {},
   isConnected,
   rosService: propsRosService,
   onError,
+  showFitButton = true,
+  showLoadingOverlay = true,
+  showLoadingDetails = true,
+  showControlsHint = true,
+  onModelReady,
+  onServoCommand,
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -34,6 +52,10 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
   const orbitTargetRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 0.15, 0));
   const initialAutoFitDoneRef = useRef(false);
   const hasUserInteractedRef = useRef(false);
+  const latestJointsRef = useRef<Record<number, number>>({});
+  const latestNamedJointsRef = useRef<Record<string, number>>({});
+  const handHandlesRef = useRef<{ left?: THREE.Mesh; right?: THREE.Mesh }>({});
+  const isDraggingHandleRef = useRef(false);
   
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -74,6 +96,7 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
         scene.fog = new THREE.Fog(0x1a1a2e, 50, 100);
         sceneRef.current = scene;
 
+        // Camera setup - zoomed out to see entire robot
         // Camera setup - zoomed out to see entire robot
         const camera = new THREE.PerspectiveCamera(
           75,
@@ -131,10 +154,18 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
         // Load URDF
         let urdfString: string;
         const loadLocalURDF = async (): Promise<string> => {
+          if (cachedLocalURDF) {
+            return cachedLocalURDF;
+          }
           setLoadingMessage('Loading local URDF...');
-          const response = await fetch('/data/inmoov-local.urdf');
+          let response = await fetch(LOCAL_URDF_URL);
+          if (!response.ok) {
+            // Dev fallback for public/data path.
+            response = await fetch('/data/inmoov-local.urdf');
+          }
           if (!response.ok) throw new Error(`Failed to load URDF: ${response.status}`);
-          return response.text();
+          cachedLocalURDF = await response.text();
+          return cachedLocalURDF;
         };
 
         if (isConnected && rosServiceRef.current) {
@@ -168,40 +199,12 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
         
         scene.add(robotScene);
         urdfBuilderRef.current = builder;
-        const focusObject = getPrimaryFocusObject(robotScene);
-        fitCameraToObject(camera, focusObject, orbitTargetRef.current, 1.5);
+        fitCameraToRobot(camera, robotScene, orbitTargetRef.current, 1.5);
+        createOrUpdateHandHandles(scene, robotScene, handHandlesRef.current);
 
         // Build joint name to servo ID mapping
-        const buildJointMapping = () => {
-          const mapping = new Map<string, number>();
-          
-          // Head joints
-          const jointMapping: Record<string, number> = {
-            'head_roll_joint': 0,
-            'head_tilt_joint': 1,
-            'head_pan_joint': 2,
-            'jaw_joint': 3,
-            'eyes_tilt_joint': 4,
-            'eyes_pan_joint': 5,
-            'l_eye_pan_joint': 6,
-            'r_shoulder_out_joint': 7,
-            'r_shoulder_lift_joint': 8,
-            'r_upper_arm_roll_joint': 9,
-            'r_elbow_flex_joint': 10,
-            'r_wrist_roll_joint': 11,
-            'l_shoulder_out_joint': 12,
-            'l_shoulder_lift_joint': 13,
-            'l_upper_arm_roll_joint': 14,
-            'l_elbow_flex_joint': 15,
-            'l_wrist_roll_joint': 16,
-          };
-
-          Object.entries(jointMapping).forEach(([jointName, servoId]) => {
-            mapping.set(jointName, servoId);
-          });
-
-          return mapping;
-        };
+        const buildJointMapping = () =>
+          new Map<string, number>(Object.entries(JOINT_NAME_TO_SERVO_ID));
 
         jointMappingsRef.current = buildJointMapping();
 
@@ -215,8 +218,7 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
           renderer.setSize(width, height);
 
           if (!hasUserInteractedRef.current && robotGroupRef.current) {
-            const focus = getPrimaryFocusObject(robotGroupRef.current);
-            fitCameraToObject(camera, focus, orbitTargetRef.current, 1.5);
+            fitCameraToRobot(camera, robotGroupRef.current, orbitTargetRef.current, 1.5);
           }
         };
         window.addEventListener('resize', handleResize);
@@ -234,6 +236,7 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
         // Animation loop
         const animate = () => {
           animationFrameId = requestAnimationFrame(animate);
+          updateHandHandlePositions(robotScene, handHandlesRef.current);
           renderer.render(scene, camera);
         };
         animate();
@@ -245,12 +248,33 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
           () => orbitTargetRef.current,
           () => {
             hasUserInteractedRef.current = true;
-          }
+          },
+          () => isDraggingHandleRef.current
         );
         cleanupFns.push(controlsCleanup);
+        const handDragCleanup = setupHandDragControls({
+          renderer,
+          camera,
+          robotRoot: robotScene,
+          getHandles: () => handHandlesRef.current,
+          onUserInteraction: () => {
+            hasUserInteractedRef.current = true;
+          },
+          isDraggingHandleRef,
+          getCurrentAngles: () => latestJointsRef.current,
+          updateLocalJoint: (jointName, degrees) => {
+            const radians = THREE.MathUtils.degToRad(degrees);
+            builder.updateJoint(jointName, radians);
+          },
+          sendServo: (id, angle) => {
+            onServoCommand?.({ id, angle });
+          },
+        });
+        cleanupFns.push(handDragCleanup);
 
         setIsLoading(false);
         setLoadingMessage('');
+        onModelReady?.();
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         console.error('[URDF Viewer] Error:', errorMessage);
@@ -272,16 +296,26 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
         rendererRef.current.dispose();
       }
     };
-  }, [isConnected, config.rosUrl, onError]);
+  }, [isConnected, config.rosUrl, onError, onModelReady, onServoCommand]);
 
   // Update joint angles from ROS2 joint_states
   useEffect(() => {
     if (!urdfBuilderRef.current || !jointMappingsRef.current) return;
+    latestJointsRef.current = joints;
+    latestNamedJointsRef.current = jointStatesByName;
 
     const builder = urdfBuilderRef.current;
     const jointMappings = jointMappingsRef.current;
+    const hasNamedJointStates = Object.keys(jointStatesByName).length > 0;
 
-    // Update each joint
+    // Preferred path: full URDF update by ROS joint name (radians).
+    Object.entries(jointStatesByName).forEach(([jointName, angleRadians]) => {
+      if (typeof angleRadians === 'number') {
+        builder.updateJoint(jointName, angleRadians);
+      }
+    });
+
+    // Legacy path: servo-id mapped updates (degrees).
     jointMappings.forEach((servoId, jointName) => {
       if (joints[servoId] !== undefined) {
         const angleRadians = THREE.MathUtils.degToRad(joints[servoId]);
@@ -293,14 +327,18 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
       const activeJoints = Array.from(jointMappings.entries())
         .filter(([_, id]) => joints[id] !== undefined)
         .length;
-      setDebugStats(`Active joints: ${activeJoints}/${jointMappings.size}`);
+      const namedCount = Object.keys(jointStatesByName).length;
+      setDebugStats(
+        hasNamedJointStates
+          ? `Named joints: ${namedCount} | Servo-mapped: ${activeJoints}/${jointMappings.size}`
+          : `Active joints: ${activeJoints}/${jointMappings.size}`
+      );
     }
-  }, [joints, debugMode]);
+  }, [joints, jointStatesByName, debugMode]);
 
   const fitViewToRobot = () => {
     if (!cameraRef.current || !robotGroupRef.current) return;
-    const focusObject = getPrimaryFocusObject(robotGroupRef.current);
-    fitCameraToObject(cameraRef.current, focusObject, orbitTargetRef.current, 1.5);
+    fitCameraToRobot(cameraRef.current, robotGroupRef.current, orbitTargetRef.current, 1.5);
   };
 
   // Ensure first open matches Fit View exactly (after layout settles).
@@ -311,18 +349,28 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
     initialAutoFitDoneRef.current = true;
     let raf1 = 0;
     let raf2 = 0;
-    const timer = window.setTimeout(() => {
-      raf1 = window.requestAnimationFrame(() => {
-        raf2 = window.requestAnimationFrame(() => {
-          if (!hasUserInteractedRef.current) {
-            fitViewToRobot();
-          }
+    const timers: number[] = [];
+
+    const scheduleFit = (delayMs: number) => {
+      const timer = window.setTimeout(() => {
+        raf1 = window.requestAnimationFrame(() => {
+          raf2 = window.requestAnimationFrame(() => {
+            if (!hasUserInteractedRef.current) {
+              fitViewToRobot();
+            }
+          });
         });
-      });
-    }, 80);
+      }, delayMs);
+      timers.push(timer);
+    };
+
+    // Multi-pass auto-fit: handles late layout/asset settling.
+    scheduleFit(80);
+    scheduleFit(320);
+    scheduleFit(700);
 
     return () => {
-      window.clearTimeout(timer);
+      timers.forEach((timer) => window.clearTimeout(timer));
       if (raf1) window.cancelAnimationFrame(raf1);
       if (raf2) window.cancelAnimationFrame(raf2);
     };
@@ -333,14 +381,14 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
       <div ref={mountRef} style={{ width: '100%', height: '100%' }} />
 
       {/* Loading Indicator */}
-      {isLoading && (
+      {isLoading && showLoadingOverlay && (
         <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-70 z-20">
           <div className="text-center">
             <div className="mb-4 flex justify-center">
               <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
             </div>
             <p className="text-white text-lg font-semibold">Loading 3D Model...</p>
-            <p className="text-gray-400 text-sm mt-2">{loadingMessage}</p>
+            {showLoadingDetails && <p className="text-gray-400 text-sm mt-2">{loadingMessage}</p>}
           </div>
         </div>
       )}
@@ -357,16 +405,21 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
       )}
 
       {/* Info Overlay */}
-      <div className="absolute bottom-4 left-4 text-xs text-gray-400 z-10">
-        <p>ðŸ–±ï¸ Drag to rotate | Scroll to zoom | Right-click to pan</p>
-      </div>
+      {showControlsHint && (
+        <div className="absolute bottom-4 left-4 text-xs text-gray-400 z-10">
+          <p>Drag to rotate | Scroll to zoom | Right-click to pan</p>
+          <p>Drag blue/green hand points to move arms directly</p>
+        </div>
+      )}
 
-      <button
-        onClick={fitViewToRobot}
-        className="absolute top-4 left-4 px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 z-10"
-      >
-        Fit View
-      </button>
+      {showFitButton && (
+        <button
+          onClick={fitViewToRobot}
+          className="absolute top-4 left-4 px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 z-10"
+        >
+          Fit View
+        </button>
+      )}
 
       {/* Debug Info Panel */}
       {debugMode && (
@@ -392,7 +445,8 @@ function setupControls(
   renderer: THREE.WebGLRenderer,
   camera: THREE.PerspectiveCamera,
   getOrbitTarget: () => THREE.Vector3,
-  onUserInteraction?: () => void
+  onUserInteraction?: () => void,
+  shouldBlockInteraction?: () => boolean
 ) {
   let isDragging = false;
   let previousMousePosition = { x: 0, y: 0 };
@@ -400,6 +454,7 @@ function setupControls(
   const domElement = renderer.domElement;
 
   const onMouseDown = (e: MouseEvent) => {
+    if (shouldBlockInteraction?.()) return;
     isDragging = true;
     onUserInteraction?.();
     previousMousePosition = { x: e.clientX, y: e.clientY };
@@ -434,6 +489,7 @@ function setupControls(
   };
 
   const onWheel = (e: WheelEvent) => {
+    if (shouldBlockInteraction?.()) return;
     e.preventDefault();
     onUserInteraction?.();
     const target = getOrbitTarget();
@@ -487,38 +543,434 @@ function fitCameraToObject(
   camera.updateProjectionMatrix();
 }
 
-function getPrimaryFocusObject(root: THREE.Object3D): THREE.Object3D {
-  const preferredLinkNames = [
-    'torso_link',
-    'chestplate_link',
-    'mid_stomach_link',
-    'head_link',
-    'r_shoulder_link',
-    'l_shoulder_link',
-    'r_forearm_link',
-    'l_forearm_link',
-  ];
+function fitCameraToRobot(
+  camera: THREE.PerspectiveCamera,
+  robotRoot: THREE.Object3D,
+  orbitTarget: THREE.Vector3,
+  offset = 1.5
+) {
+  robotRoot.updateMatrixWorld(true);
 
-  for (const linkName of preferredLinkNames) {
-    const candidate = root.getObjectByName(linkName);
-    if (candidate && hasRenderableGeometry(candidate)) return candidate;
+  if (fitCameraToAnchorPose(camera, robotRoot, orbitTarget, offset)) {
+    return;
   }
 
-  return root;
+  const focusNode = findPreferredFocusNode(robotRoot);
+  if (focusNode) {
+    const bounds = new THREE.Box3().setFromObject(focusNode);
+    if (!bounds.isEmpty()) {
+      fitCameraToBounds(camera, bounds, orbitTarget, offset);
+      return;
+    }
+  }
+
+  const robotBounds = computeRobotBodyBounds(robotRoot);
+  if (robotBounds) {
+    fitCameraToBounds(camera, robotBounds, orbitTarget, offset);
+    return;
+  }
+
+  fitCameraToObject(camera, robotRoot, orbitTarget, offset);
 }
 
-function hasRenderableGeometry(object: THREE.Object3D): boolean {
-  let foundMesh = false;
-  object.traverse((child) => {
-    if (!foundMesh && child instanceof THREE.Mesh) {
-      const geometry = child.geometry as THREE.BufferGeometry;
-      const position = geometry?.attributes?.position;
-      if (position && position.count > 0) {
-        foundMesh = true;
+function fitCameraToAnchorPose(
+  camera: THREE.PerspectiveCamera,
+  robotRoot: THREE.Object3D,
+  orbitTarget: THREE.Vector3,
+  offset = 1.5
+): boolean {
+  const torso = robotRoot.getObjectByName('torso_link');
+  const head = robotRoot.getObjectByName('head_link') || robotRoot.getObjectByName('head_base_link');
+  if (!torso || !head) return false;
+
+  const torsoPos = new THREE.Vector3();
+  const headPos = new THREE.Vector3();
+  torso.getWorldPosition(torsoPos);
+  head.getWorldPosition(headPos);
+
+  const leftShoulder = robotRoot.getObjectByName('l_shoulder_link');
+  const rightShoulder = robotRoot.getObjectByName('r_shoulder_link');
+  const leftShoulderPos = new THREE.Vector3();
+  const rightShoulderPos = new THREE.Vector3();
+  let shoulderSpan = 0.45;
+
+  if (leftShoulder && rightShoulder) {
+    leftShoulder.getWorldPosition(leftShoulderPos);
+    rightShoulder.getWorldPosition(rightShoulderPos);
+    shoulderSpan = Math.max(0.25, leftShoulderPos.distanceTo(rightShoulderPos));
+  }
+
+  const torsoToHead = Math.max(0.3, torsoPos.distanceTo(headPos));
+  const framingSize = Math.max(torsoToHead * 2.8, shoulderSpan * 2.2);
+  const fov = THREE.MathUtils.degToRad(camera.fov);
+  const distance = ((framingSize / 2) / Math.tan(fov / 2)) * offset;
+
+  const target = torsoPos.clone().lerp(headPos, 0.32);
+  const direction = new THREE.Vector3(1, 0.14, 0).normalize();
+  camera.position.copy(target.clone().add(direction.multiplyScalar(distance)));
+  camera.near = Math.max(0.01, distance / 120);
+  camera.far = distance * 120;
+  orbitTarget.copy(target);
+  camera.lookAt(target);
+  camera.updateProjectionMatrix();
+  return true;
+}
+
+function findPreferredFocusNode(root: THREE.Object3D): THREE.Object3D | null {
+  const preferredNames = ['torso_link', 'chestplate_link', 'top_stomach_link', 'head_link'];
+
+  for (const name of preferredNames) {
+    const node = root.getObjectByName(name);
+    if (node) return node;
+  }
+
+  return null;
+}
+
+function fitCameraToBounds(
+  camera: THREE.PerspectiveCamera,
+  bounds: THREE.Box3,
+  orbitTarget: THREE.Vector3,
+  offset = 1.5
+) {
+  const size = bounds.getSize(new THREE.Vector3());
+  const center = bounds.getCenter(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z);
+  const fov = THREE.MathUtils.degToRad(camera.fov);
+  const distance = (maxDim / 2) / Math.tan(fov / 2) * offset;
+
+  const target = center.clone();
+  target.y += size.y * 0.05;
+  const direction = new THREE.Vector3(1, 0.18, 0).normalize();
+  camera.position.copy(target.clone().add(direction.multiplyScalar(distance)));
+  camera.near = Math.max(0.01, distance / 100);
+  camera.far = distance * 100;
+  orbitTarget.copy(target);
+  camera.lookAt(target);
+  camera.updateProjectionMatrix();
+}
+
+function computeRobotBodyBounds(root: THREE.Object3D): THREE.Box3 | null {
+  const excludedLinks = new Set(['base_link', 'pedestal_link', 'world']);
+  const excludedNameHints = ['support', 'stand', 'pedestal', 'base_plate', 'rod'];
+  const bounds = new THREE.Box3();
+  let hasAny = false;
+
+  root.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh)) return;
+
+    const ownerLink = findOwnerLinkName(obj, root);
+    if (!ownerLink) return;
+
+    const ownerLower = ownerLink.toLowerCase();
+    if (excludedLinks.has(ownerLink)) return;
+    if (excludedNameHints.some((hint) => ownerLower.includes(hint))) {
+      return;
+    }
+
+    bounds.expandByObject(obj);
+    hasAny = true;
+  });
+
+  return hasAny ? bounds : null;
+}
+
+function findOwnerLinkName(mesh: THREE.Object3D, root: THREE.Object3D): string | null {
+  let current: THREE.Object3D | null = mesh.parent;
+  while (current && current !== root) {
+    if (current.name && current.name.endsWith('_link')) {
+      return current.name;
+    }
+    current = current.parent;
+  }
+  return null;
+}
+
+type ArmSide = 'left' | 'right';
+
+interface ArmDragConfig {
+  side: ArmSide;
+  handleName: string;
+  handLinkName: string;
+  shoulderLinkName: string;
+  shoulderOutJoint: string;
+  shoulderLiftJoint: string;
+  elbowJoint: string;
+  shoulderOutServo: number;
+  shoulderLiftServo: number;
+  elbowServo: number;
+}
+
+const ARM_DRAG_CONFIG: Record<ArmSide, ArmDragConfig> = {
+  right: {
+    side: 'right',
+    handleName: 'ik_handle_right',
+    handLinkName: 'r_hand_link',
+    shoulderLinkName: 'r_shoulder_link',
+    shoulderOutJoint: 'r_shoulder_out_joint',
+    shoulderLiftJoint: 'r_shoulder_lift_joint',
+    elbowJoint: 'r_elbow_flex_joint',
+    shoulderOutServo: 7,
+    shoulderLiftServo: 8,
+    elbowServo: 10,
+  },
+  left: {
+    side: 'left',
+    handleName: 'ik_handle_left',
+    handLinkName: 'l_hand_link',
+    shoulderLinkName: 'l_shoulder_link',
+    shoulderOutJoint: 'l_shoulder_out_joint',
+    shoulderLiftJoint: 'l_shoulder_lift_joint',
+    elbowJoint: 'l_elbow_flex_joint',
+    shoulderOutServo: 12,
+    shoulderLiftServo: 13,
+    elbowServo: 15,
+  },
+};
+
+function createOrUpdateHandHandles(
+  scene: THREE.Scene,
+  robotRoot: THREE.Object3D,
+  handles: { left?: THREE.Mesh; right?: THREE.Mesh }
+) {
+  (Object.keys(ARM_DRAG_CONFIG) as ArmSide[]).forEach((side) => {
+    const config = ARM_DRAG_CONFIG[side];
+    const handLink = robotRoot.getObjectByName(config.handLinkName);
+    if (!handLink) return;
+
+    const existing = handles[side];
+    if (existing) {
+      existing.userData.armSide = side;
+      return;
+    }
+
+    const geometry = new THREE.SphereGeometry(0.04, 24, 24);
+    const material = new THREE.MeshStandardMaterial({
+      color: side === 'right' ? 0x3b82f6 : 0x22c55e,
+      emissive: side === 'right' ? 0x1d4ed8 : 0x166534,
+      emissiveIntensity: 1.0,
+      roughness: 0.15,
+      metalness: 0.2,
+      transparent: true,
+      opacity: 0.98,
+      depthTest: false,
+      depthWrite: false,
+    });
+
+    const handle = new THREE.Mesh(geometry, material);
+    handle.name = config.handleName;
+    handle.castShadow = false;
+    handle.receiveShadow = false;
+    handle.renderOrder = 999;
+    handle.userData.armSide = side;
+    scene.add(handle);
+    handles[side] = handle;
+  });
+
+  updateHandHandlePositions(robotRoot, handles);
+}
+
+function updateHandHandlePositions(
+  robotRoot: THREE.Object3D,
+  handles: { left?: THREE.Mesh; right?: THREE.Mesh }
+) {
+  const worldPosition = new THREE.Vector3();
+  const shoulderPosition = new THREE.Vector3();
+  const direction = new THREE.Vector3();
+  (Object.keys(ARM_DRAG_CONFIG) as ArmSide[]).forEach((side) => {
+    const handle = handles[side];
+    if (!handle) return;
+    const config = ARM_DRAG_CONFIG[side];
+    const handLink = robotRoot.getObjectByName(config.handLinkName);
+    const shoulderLink = robotRoot.getObjectByName(config.shoulderLinkName);
+    if (!handLink) return;
+
+    handLink.getWorldPosition(worldPosition);
+
+    if (shoulderLink) {
+      shoulderLink.getWorldPosition(shoulderPosition);
+      direction.copy(worldPosition).sub(shoulderPosition);
+      if (direction.lengthSq() > 1e-6) {
+        direction.normalize();
+        // Push handle slightly outside hand volume so it is visible/clickable.
+        worldPosition.addScaledVector(direction, 0.06);
       }
     }
+
+    handle.position.copy(worldPosition);
   });
-  return foundMesh;
+}
+
+interface HandDragArgs {
+  renderer: THREE.WebGLRenderer;
+  camera: THREE.PerspectiveCamera;
+  robotRoot: THREE.Object3D;
+  getHandles: () => { left?: THREE.Mesh; right?: THREE.Mesh };
+  onUserInteraction?: () => void;
+  isDraggingHandleRef: React.MutableRefObject<boolean>;
+  getCurrentAngles: () => Record<number, number>;
+  updateLocalJoint: (jointName: string, angleDegrees: number) => void;
+  sendServo: (id: number, angle: number) => void;
+}
+
+function setupHandDragControls({
+  renderer,
+  camera,
+  robotRoot,
+  getHandles,
+  onUserInteraction,
+  isDraggingHandleRef,
+  getCurrentAngles,
+  updateLocalJoint,
+  sendServo,
+}: HandDragArgs) {
+  const domElement = renderer.domElement;
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
+  const dragPlane = new THREE.Plane();
+  const hitPoint = new THREE.Vector3();
+  const startPoint = new THREE.Vector3();
+  const deltaVec = new THREE.Vector3();
+  const rightAxis = new THREE.Vector3();
+  const upAxis = new THREE.Vector3();
+  const camDir = new THREE.Vector3();
+
+  let activeArm: ArmSide | null = null;
+  let startShoulderOut = 0;
+  let startShoulderLift = 0;
+  let startElbow = 0;
+  let startDistance = 0.1;
+
+  const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+  const setPointer = (event: MouseEvent) => {
+    const rect = domElement.getBoundingClientRect();
+    pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  };
+
+  const resolveCurrentAngles = (config: ArmDragConfig) => {
+    const angles = getCurrentAngles();
+    return {
+      shoulderOut: angles[config.shoulderOutServo] ?? 0,
+      shoulderLift: angles[config.shoulderLiftServo] ?? 0,
+      elbow: angles[config.elbowServo] ?? 25,
+    };
+  };
+
+  const applyArmAngles = (config: ArmDragConfig, shoulderOut: number, shoulderLift: number, elbow: number) => {
+    updateLocalJoint(config.shoulderOutJoint, shoulderOut);
+    updateLocalJoint(config.shoulderLiftJoint, shoulderLift);
+    updateLocalJoint(config.elbowJoint, elbow);
+
+    sendServo(config.shoulderOutServo, shoulderOut);
+    sendServo(config.shoulderLiftServo, shoulderLift);
+    sendServo(config.elbowServo, elbow);
+  };
+
+  const onMouseDown = (event: MouseEvent) => {
+    const handlesObj = getHandles();
+    const handles: THREE.Object3D[] = [handlesObj.left, handlesObj.right].filter(Boolean) as THREE.Object3D[];
+    if (handles.length === 0) return;
+
+    setPointer(event);
+    raycaster.setFromCamera(pointer, camera);
+    const intersections = raycaster.intersectObjects(handles, false);
+    if (intersections.length === 0) return;
+
+    const hit = intersections[0];
+    const hitSide = hit.object.userData.armSide as ArmSide | undefined;
+    if (!hitSide) return;
+    const config = ARM_DRAG_CONFIG[hitSide];
+
+    const current = resolveCurrentAngles(config);
+    startShoulderOut = current.shoulderOut;
+    startShoulderLift = current.shoulderLift;
+    startElbow = current.elbow;
+    activeArm = hitSide;
+    isDraggingHandleRef.current = true;
+    onUserInteraction?.();
+
+    startPoint.copy(hit.point);
+    camera.getWorldDirection(camDir).normalize();
+    dragPlane.setFromNormalAndCoplanarPoint(camDir, hit.point);
+
+    const shoulderLink = robotRoot.getObjectByName(config.shoulderLinkName);
+    if (shoulderLink) {
+      const shoulderPos = new THREE.Vector3();
+      shoulderLink.getWorldPosition(shoulderPos);
+      startDistance = Math.max(0.05, shoulderPos.distanceTo(hit.point));
+    } else {
+      startDistance = 0.2;
+    }
+  };
+
+  const onMouseMove = (event: MouseEvent) => {
+    const handlesObj = getHandles();
+    const handleList: THREE.Object3D[] = [handlesObj.left, handlesObj.right].filter(Boolean) as THREE.Object3D[];
+
+    // Hover feedback when not dragging.
+    if (!activeArm && handleList.length > 0) {
+      setPointer(event);
+      raycaster.setFromCamera(pointer, camera);
+      const hovered = raycaster.intersectObjects(handleList, false);
+      handleList.forEach((obj) => obj.scale.setScalar(1));
+      if (hovered.length > 0) {
+        hovered[0].object.scale.setScalar(1.3);
+      }
+    }
+
+    if (!activeArm) return;
+    const config = ARM_DRAG_CONFIG[activeArm];
+
+    setPointer(event);
+    raycaster.setFromCamera(pointer, camera);
+    const hitOk = raycaster.ray.intersectPlane(dragPlane, hitPoint);
+    if (!hitOk) return;
+
+    deltaVec.copy(hitPoint).sub(startPoint);
+
+    camera.getWorldDirection(camDir).normalize();
+    rightAxis.crossVectors(camDir, camera.up).normalize();
+    upAxis.copy(camera.up).normalize();
+
+    const dx = deltaVec.dot(rightAxis);
+    const dy = deltaVec.dot(upAxis);
+    const sideSign = activeArm === 'right' ? 1 : -1;
+
+    const shoulderOut = clamp(startShoulderOut + dx * 260 * sideSign, -90, 90);
+    const shoulderLift = clamp(startShoulderLift - dy * 260, -90, 90);
+
+    const shoulderLink = robotRoot.getObjectByName(config.shoulderLinkName);
+    let elbow = startElbow;
+    if (shoulderLink) {
+      const shoulderPos = new THREE.Vector3();
+      shoulderLink.getWorldPosition(shoulderPos);
+      const currentDistance = Math.max(0.05, shoulderPos.distanceTo(hitPoint));
+      elbow = clamp(startElbow + (currentDistance - startDistance) * 280, 0, 130);
+    }
+
+    applyArmAngles(config, shoulderOut, shoulderLift, elbow);
+  };
+
+  const onMouseUp = () => {
+    activeArm = null;
+    isDraggingHandleRef.current = false;
+    const handlesObj = getHandles();
+    [handlesObj.left, handlesObj.right].forEach((obj) => obj?.scale.setScalar(1));
+  };
+
+  domElement.addEventListener('mousedown', onMouseDown);
+  domElement.addEventListener('mousemove', onMouseMove);
+  domElement.addEventListener('mouseup', onMouseUp);
+  domElement.addEventListener('mouseleave', onMouseUp);
+
+  return () => {
+    domElement.removeEventListener('mousedown', onMouseDown);
+    domElement.removeEventListener('mousemove', onMouseMove);
+    domElement.removeEventListener('mouseup', onMouseUp);
+    domElement.removeEventListener('mouseleave', onMouseUp);
+  };
 }
 
 export default RobotViewer;

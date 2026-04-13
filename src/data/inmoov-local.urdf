@@ -516,4 +516,42 @@
   <joint name="l_pinky_joint" type="revolute"><parent link="l_pinky1_link"/><child link="l_pinky2_link"/><origin xyz="0 0.046 -0.0228" rpy="0.93 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
   <joint name="l_pinky3_joint" type="revolute"><parent link="l_pinky2_link"/><child link="l_pinky3_link"/><origin xyz="0 0.0005 -0.031" rpy="0 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
   <joint name="l_pinky4_joint" type="revolute"><parent link="l_pinky3_link"/><child link="l_pinky4_link"/><origin xyz="0 0.0004 -0.0208" rpy="0 0 0"/><axis xyz="0 1 0"/><limit lower="-1.2" upper="1.2" effort="1000" velocity="1.0"/></joint>
+
+  <!-- Right hand covers -->
+  <link name="r_handcover_link"><visual><geometry><mesh filename="package://meshes/r_cover_hand.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="r_cover_handring_link"><visual><geometry><mesh filename="package://meshes/r_cover_handring.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="r_cover_handpinky_link"><visual><geometry><mesh filename="package://meshes/r_cover_handpinky.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="r_cover_thumb_link"><visual><geometry><mesh filename="package://meshes/r_cover_thumb.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="r_cover_index_link"><visual><geometry><mesh filename="package://meshes/r_cover_index.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="r_cover_middle_link"><visual><geometry><mesh filename="package://meshes/r_cover_middle.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="r_cover_ring_link"><visual><geometry><mesh filename="package://meshes/r_cover_ring.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="r_cover_pinky_link"><visual><geometry><mesh filename="package://meshes/r_cover_pinky.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+
+  <joint name="r_handcover_joint" type="fixed"><parent link="r_hand_link"/><child link="r_handcover_link"/><origin xyz="0.009 0.0192 -0.0977" rpy="0 0 0"/></joint>
+  <joint name="r_cover_handpinky_joint" type="fixed"><parent link="r_pinky1_link"/><child link="r_cover_handpinky_link"/><origin xyz="0.01 -0.02025 -0.0071" rpy="-0.7 0 0"/></joint>
+  <joint name="r_cover_handring_joint" type="fixed"><parent link="r_ring1_link"/><child link="r_cover_handring_link"/><origin xyz="0.009 -0.015 -0.0008" rpy="-0.7 0 0"/></joint>
+  <joint name="r_cover_middle_joint" type="fixed"><parent link="r_middle1_link"/><child link="r_cover_middle_link"/><origin xyz="0.0071 0 -0.012" rpy="0 -0.05 0"/></joint>
+  <joint name="r_cover_thumb_joint" type="fixed"><parent link="r_thumb1_link"/><child link="r_cover_thumb_link"/><origin xyz="0.01 0.02125 0.0047" rpy="0.05 0 0"/></joint>
+  <joint name="r_cover_index_joint" type="fixed"><parent link="r_index1_link"/><child link="r_cover_index_link"/><origin xyz="0.0071 0 -0.012" rpy="0 0.05 0"/></joint>
+  <joint name="r_cover_ring_joint" type="fixed"><parent link="r_ring2_link"/><child link="r_cover_ring_link"/><origin xyz="0.005 0 -0.011" rpy="0.1 -0.05 0"/></joint>
+  <joint name="r_cover_pinky_joint" type="fixed"><parent link="r_pinky2_link"/><child link="r_cover_pinky_link"/><origin xyz="0.005 0 -0.0105" rpy="0.1 -0.05 0"/></joint>
+
+  <!-- Left hand covers -->
+  <link name="l_handcover_link"><visual><geometry><mesh filename="package://meshes/l_cover_hand.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="l_cover_handring_link"><visual><geometry><mesh filename="package://meshes/l_cover_handring.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="l_cover_handpinky_link"><visual><geometry><mesh filename="package://meshes/l_cover_handpinky.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="l_cover_thumb_link"><visual><geometry><mesh filename="package://meshes/l_cover_thumb.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="l_cover_index_link"><visual><geometry><mesh filename="package://meshes/l_cover_index.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="l_cover_middle_link"><visual><geometry><mesh filename="package://meshes/l_cover_middle.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="l_cover_ring_link"><visual><geometry><mesh filename="package://meshes/l_cover_ring.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="l_cover_pinky_link"><visual><geometry><mesh filename="package://meshes/l_cover_pinky.stl" scale="0.001 0.001 0.001"/></geometry></visual></link>
+
+  <joint name="l_handcover_joint" type="fixed"><parent link="l_hand_link"/><child link="l_handcover_link"/><origin xyz="0.009 -0.0192 -0.0977" rpy="0 0 0"/></joint>
+  <joint name="l_cover_handpinky_joint" type="fixed"><parent link="l_pinky1_link"/><child link="l_cover_handpinky_link"/><origin xyz="0.01 0.02025 -0.0071" rpy="0.7 0 0"/></joint>
+  <joint name="l_cover_handring_joint" type="fixed"><parent link="l_ring1_link"/><child link="l_cover_handring_link"/><origin xyz="0.009 0.015 -0.0008" rpy="0.7 0 0"/></joint>
+  <joint name="l_cover_middle_joint" type="fixed"><parent link="l_middle1_link"/><child link="l_cover_middle_link"/><origin xyz="0.0071 0 -0.012" rpy="0 0.05 0"/></joint>
+  <joint name="l_cover_thumb_joint" type="fixed"><parent link="l_thumb1_link"/><child link="l_cover_thumb_link"/><origin xyz="0.01 -0.02125 0.0047" rpy="-0.05 0 0"/></joint>
+  <joint name="l_cover_index_joint" type="fixed"><parent link="l_index1_link"/><child link="l_cover_index_link"/><origin xyz="0.0071 0 -0.012" rpy="0 -0.05 0"/></joint>
+  <joint name="l_cover_ring_joint" type="fixed"><parent link="l_ring2_link"/><child link="l_cover_ring_link"/><origin xyz="0.005 0 -0.011" rpy="-0.1 0.05 0"/></joint>
+  <joint name="l_cover_pinky_joint" type="fixed"><parent link="l_pinky2_link"/><child link="l_cover_pinky_link"/><origin xyz="0.005 0 -0.0105" rpy="-0.1 0.05 0"/></joint>
 </robot>

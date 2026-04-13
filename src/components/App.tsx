@@ -7,6 +7,7 @@ import ManualServoControlPage from '../pages/ManualServoControlPage';
 import Visualization3DPage from '../pages/Visualization3DPage';
 import RosMonitorPage from '../pages/RosMonitorPage';
 import SettingsPage from '../pages/SettingsPage';
+import Startup3DIntro from './shared/Startup3DIntro';
 import { useAppStore } from '../store/appStore';
 import { ServoCommand, ROS2Topic, ROSState } from '../types';
 import { ROSService } from '../services/ros.service';
@@ -16,6 +17,7 @@ const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [cameraConnected, setCameraConnected] = useState(true);
   const [joints, setJoints] = useState<Record<number, number>>({});
+  const [jointStatesByName, setJointStatesByName] = useState<Record<string, number>>({});
   const [rosState, setRosState] = useState<ROSState>({
     isConnected: false,
     rosUrl: config.rosUrl,
@@ -23,6 +25,7 @@ const App: React.FC = () => {
   });
   const [topics, setTopics] = useState<ROS2Topic[]>([]);
   const [isLoadingTopics, setIsLoadingTopics] = useState(false);
+  const [showStartupIntro, setShowStartupIntro] = useState<boolean>(false);
 
   const rosServiceRef = useRef<ROSService | null>(null);
 
@@ -38,9 +41,10 @@ const App: React.FC = () => {
           error: null,
         });
 
-        // Subscribe to joint states
-        rosServiceRef.current.subscribeToJointStates((joints) => {
-          setJoints(joints);
+        // Subscribe to joint states (servo IDs + full URDF joint names)
+        rosServiceRef.current.subscribeToJointStatesFull((servoJoints, namedJoints) => {
+          setJoints(servoJoints);
+          setJointStatesByName(namedJoints);
         });
 
         // Load topics
@@ -80,6 +84,10 @@ const App: React.FC = () => {
     setCameraConnected(true);
   };
 
+  const handleIntroComplete = () => {
+    setShowStartupIntro(false);
+  };
+
   const renderPage = () => {
     switch (currentPage) {
       case 1:
@@ -100,7 +108,14 @@ const App: React.FC = () => {
       case 3:
         return <ServoPage onServoCommand={handleServoCommand} />;
       case 6:
-        return <Visualization3DPage joints={joints} onServoCommand={handleServoCommand} rosService={rosServiceRef.current} />;
+        return (
+          <Visualization3DPage
+            joints={joints}
+            jointStatesByName={jointStatesByName}
+            onServoCommand={handleServoCommand}
+            rosService={rosServiceRef.current}
+          />
+        );
       case 7:
         return <ManualServoControlPage joints={joints} onServoCommand={handleServoCommand} rosService={rosServiceRef.current} />;
       case 4:
@@ -167,6 +182,8 @@ const App: React.FC = () => {
           {renderPage()}
         </div>
       </div>
+
+      {showStartupIntro && <Startup3DIntro onComplete={handleIntroComplete} />}
     </div>
   );
 };

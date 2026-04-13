@@ -17,7 +17,7 @@ export class ROSService {
   private subscribers: Map<string, any> = new Map();
   private publishers: Map<string, any> = new Map();
   private topicCache: Map<string, any> = new Map();
-  private isConnectedFlag: boolean = false;
+  private isConnectedFlag = false;
 
   constructor(rosUrl: string) {
     if (!window.ROSLIB) {
@@ -146,7 +146,7 @@ export class ROSService {
           const angleDegrees = (msg.position[index] * 180) / Math.PI;
           
           // Map joint names to servo IDs (you may need to adjust these mappings)
-          let servoId = mapJointNameToServoId(jointName);
+          const servoId = mapJointNameToServoId(jointName);
           if (servoId !== -1) {
             joints[servoId] = angleDegrees;
           }
@@ -154,6 +154,36 @@ export class ROSService {
       }
       
       callback(joints);
+    });
+  }
+
+  // Subscribe to joint states and return both:
+  // 1) servo-id mapped degrees (legacy controls)
+  // 2) joint-name mapped radians (full URDF animation)
+  subscribeToJointStatesFull(
+    callback: (
+      servoJoints: Record<number, number>,
+      jointStatesByName: Record<string, number>
+    ) => void
+  ): void {
+    this.subscribe('/joint_states', 'sensor_msgs/JointState', (msg) => {
+      const servoJoints: Record<number, number> = {};
+      const jointStatesByName: Record<string, number> = {};
+
+      if (msg.name && msg.position) {
+        msg.name.forEach((jointName: string, index: number) => {
+          const angleRadians = msg.position[index];
+          jointStatesByName[jointName] = angleRadians;
+
+          const angleDegrees = (angleRadians * 180) / Math.PI;
+          const servoId = mapJointNameToServoId(jointName);
+          if (servoId !== -1) {
+            servoJoints[servoId] = angleDegrees;
+          }
+        });
+      }
+
+      callback(servoJoints, jointStatesByName);
     });
   }
 
@@ -298,79 +328,87 @@ export class ROSService {
 
 /**
  * Map ROS2 joint names to servo IDs
- * Updated based on actual InMoov URDF joint names from /joint_states
+ * Updated based on InMoov upper-body joint names from /joint_states.
+ * Target profile: 57 joints (IDs 0..56).
  */
-function mapJointNameToServoId(jointName: string): number {
+export const JOINT_NAME_TO_SERVO_ID: Record<string, number> = {
   // Head joints
-  const headMapping: Record<string, number> = {
-    'head_roll_joint': 0,           // Head roll (left/right)
-    'head_tilt_joint': 1,           // Head tilt (up/down)
-    'head_pan_joint': 2,            // Head pan
-    
-    // Jaw/mouth
-    'jaw_joint': 3,
-    
-    // Eyes
-    'eyes_tilt_joint': 4,
-    'eyes_pan_joint': 5,
-    'l_eye_pan_joint': 6,
-    
-    // Right arm
-    'r_shoulder_out_joint': 7,
-    'r_shoulder_lift_joint': 8,
-    'r_upper_arm_roll_joint': 9,
-    'r_elbow_flex_joint': 10,
-    'r_wrist_roll_joint': 11,
-    
-    // Left arm
-    'l_shoulder_out_joint': 12,
-    'l_shoulder_lift_joint': 13,
-    'l_upper_arm_roll_joint': 14,
-    'l_elbow_flex_joint': 15,
-    'l_wrist_roll_joint': 16,
-    
-    // Right hand fingers
-    'r_thumb1_joint': 17,
-    'r_thumb_joint': 18,
-    'r_thumb3_joint': 19,
-    'r_index1_joint': 20,
-    'r_index_joint': 21,
-    'r_index3_joint': 22,
-    'r_middle1_joint': 23,
-    'r_middle_joint': 24,
-    'r_middle3_joint': 25,
-    'r_ring1_joint': 26,
-    'r_ring_joint': 27,
-    'r_ring3_joint': 28,
-    'r_ring4_joint': 29,
-    'r_pinky1_joint': 30,
-    'r_pinky_joint': 31,
-    'r_pinky3_joint': 32,
-    'r_pinky4_joint': 33,
-    
-    // Left hand fingers
-    'l_thumb1_joint': 34,
-    'l_thumb_joint': 35,
-    'l_thumb3_joint': 36,
-    'l_index1_joint': 37,
-    'l_index_joint': 38,
-    'l_index3_joint': 39,
-    'l_middle1_joint': 40,
-    'l_middle_joint': 41,
-    'l_middle3_joint': 42,
-    'l_ring1_joint': 43,
-    'l_ring_joint': 44,
-    'l_ring3_joint': 45,
-    'l_ring4_joint': 46,
-    'l_pinky1_joint': 47,
-    'l_pinky_joint': 48,
-    'l_pinky3_joint': 49,
-    'l_pinky4_joint': 50,
-    
-    // Waist
-    'waist_pan_joint': 51,
-    'waist_roll_joint': 52,
-  };
-  
-  return headMapping[jointName] ?? -1;
+  head_roll_joint: 0,
+  head_tilt_joint: 1,
+  head_pan_joint: 2,
+
+  // Jaw / mouth
+  jaw_joint: 3,
+
+  // Eyes
+  eyes_tilt_joint: 4,
+  eyes_pan_joint: 5,
+  l_eye_pan_joint: 6,
+
+  // Right arm
+  r_shoulder_out_joint: 7,
+  r_shoulder_lift_joint: 8,
+  r_upper_arm_roll_joint: 9,
+  r_elbow_flex_joint: 10,
+  r_wrist_roll_joint: 11,
+
+  // Left arm
+  l_shoulder_out_joint: 12,
+  l_shoulder_lift_joint: 13,
+  l_upper_arm_roll_joint: 14,
+  l_elbow_flex_joint: 15,
+  l_wrist_roll_joint: 16,
+
+  // Right hand fingers
+  r_thumb1_joint: 17,
+  r_thumb_joint: 18,
+  r_thumb3_joint: 19,
+  r_index1_joint: 20,
+  r_index_joint: 21,
+  r_index3_joint: 22,
+  r_middle1_joint: 23,
+  r_middle_joint: 24,
+  r_middle3_joint: 25,
+  r_ring1_joint: 26,
+  r_ring_joint: 27,
+  r_ring3_joint: 28,
+  r_ring4_joint: 29,
+  r_pinky1_joint: 30,
+  r_pinky_joint: 31,
+  r_pinky3_joint: 32,
+  r_pinky4_joint: 33,
+
+  // Left hand fingers
+  l_thumb1_joint: 34,
+  l_thumb_joint: 35,
+  l_thumb3_joint: 36,
+  l_index1_joint: 37,
+  l_index_joint: 38,
+  l_index3_joint: 39,
+  l_middle1_joint: 40,
+  l_middle_joint: 41,
+  l_middle3_joint: 42,
+  l_ring1_joint: 43,
+  l_ring_joint: 44,
+  l_ring3_joint: 45,
+  l_ring4_joint: 46,
+  l_pinky1_joint: 47,
+  l_pinky_joint: 48,
+  l_pinky3_joint: 49,
+  l_pinky4_joint: 50,
+
+  // Waist
+  waist_pan_joint: 51,
+  waist_roll_joint: 52,
+
+  // Extra visual joints used in Ubuntu flows / facial-eye chain
+  // (kept for a 57-joint unified mapping profile).
+  l_eye_joint: 53,
+  r_eye_joint: 54,
+  l_iris_joint: 55,
+  r_iris_joint: 56,
+};
+
+function mapJointNameToServoId(jointName: string): number {
+  return JOINT_NAME_TO_SERVO_ID[jointName] ?? -1;
 }

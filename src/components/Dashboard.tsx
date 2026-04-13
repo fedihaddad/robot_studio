@@ -3,6 +3,7 @@ import { DashboardState } from '../types';
 import CameraFeed from './CameraFeed';
 import StatusBar from './StatusBar';
 import ControlPanel from './ControlPanel';
+import { QuickMoveButtons } from './QuickMoveButtons';
 
 interface DashboardProps {
   state: DashboardState;
@@ -54,7 +55,8 @@ const Dashboard: React.FC<DashboardProps> = ({ state, setState }) => {
 
         {/* Control Panel - Right Side */}
         {!showSettings && (
-          <div className="w-80">
+          <div className="w-96 space-y-4 overflow-y-auto">
+            <QuickMoveButtons />
             <ControlPanel
               rosUrl={state.ros.rosUrl}
               cameraUrl={state.camera.url}

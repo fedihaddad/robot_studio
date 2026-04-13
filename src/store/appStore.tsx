@@ -6,6 +6,11 @@ interface AppStoreContextType {
   updateConfig: (config: AppConfig) => void;
   saveConfig: () => void;
   loadConfig: () => void;
+  // Offline mode joint state tracking
+  jointStates: Record<string, number>;
+  updateJointState: (jointName: string, angle: number) => void;
+  updateJointStates: (states: Record<string, number>) => void;
+  resetJointStates: () => void;
 }
 
 const AppStoreContext = createContext<AppStoreContextType | null>(null);
@@ -27,6 +32,8 @@ export const AppStoreProvider: React.FC<AppStoreProviderProps> = ({ children }) 
     return saved ? JSON.parse(saved) : DEFAULT_CONFIG;
   });
 
+  const [jointStates, setJointStates] = useState<Record<string, number>>({});
+
   const updateConfig = (newConfig: AppConfig) => {
     setConfig(newConfig);
   };
@@ -42,8 +49,37 @@ export const AppStoreProvider: React.FC<AppStoreProviderProps> = ({ children }) 
     }
   };
 
+  const updateJointState = (jointName: string, angle: number) => {
+    setJointStates(prev => ({
+      ...prev,
+      [jointName]: angle,
+    }));
+  };
+
+  const updateJointStates = (states: Record<string, number>) => {
+    setJointStates(prev => ({
+      ...prev,
+      ...states,
+    }));
+  };
+
+  const resetJointStates = () => {
+    setJointStates({});
+  };
+
   return (
-    <AppStoreContext.Provider value={{ config, updateConfig, saveConfig, loadConfig }}>
+    <AppStoreContext.Provider 
+      value={{ 
+        config, 
+        updateConfig, 
+        saveConfig, 
+        loadConfig,
+        jointStates,
+        updateJointState,
+        updateJointStates,
+        resetJointStates,
+      }}
+    >
       {children}
     </AppStoreContext.Provider>
   );

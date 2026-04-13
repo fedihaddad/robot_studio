@@ -7,7 +7,7 @@ declare global {
   }
 }
 
-export const useROS = (rosUrl: string = 'ws://localhost:9090') => {
+export const useROS = (rosUrl = 'ws://localhost:9090') => {
   const [state, setState] = useState<ROSState>({
     isConnected: false,
     rosUrl,
@@ -17,22 +17,7 @@ export const useROS = (rosUrl: string = 'ws://localhost:9090') => {
   const rosRef = useRef<any>(null);
 
   useEffect(() => {
-    // Load roslibjs dynamically if not already loaded
-    if (!window.ROSLIB) {
-      const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/roslibjs/1.3.0/roslib.min.js';
-      script.async = true;
-      script.onload = () => initializeROS();
-      script.onerror = () => {
-        setState(prev => ({
-          ...prev,
-          error: 'Failed to load roslibjs',
-        }));
-      };
-      document.body.appendChild(script);
-    } else {
-      initializeROS();
-    }
+    initializeROS();
 
     return () => {
       if (rosRef.current) {

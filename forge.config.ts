@@ -7,13 +7,24 @@ import { VitePlugin } from '@electron-forge/plugin-vite';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
 
+const certificateFile = process.env.WIN_CSC_LINK;
+const certificatePassword = process.env.WIN_CSC_KEY_PASSWORD;
+
+const squirrelConfig =
+  certificateFile && certificatePassword
+    ? {
+        certificateFile,
+        certificatePassword,
+      }
+    : {};
+
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
   },
   rebuildConfig: {},
   makers: [
-    new MakerSquirrel({}),
+    new MakerSquirrel(squirrelConfig),
     new MakerZIP({}, ['darwin']),
     new MakerRpm({}),
     new MakerDeb({}),

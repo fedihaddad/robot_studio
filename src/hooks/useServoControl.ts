@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ROSService } from '../services/ros.service';
+import { JOINT_NAME_TO_SERVO_ID, ROSService } from '../services/ros.service';
 import { ServoCommand } from '../types';
 
 interface UseServoControlOptions {
@@ -36,17 +36,25 @@ export const useServoControl = (options: UseServoControlOptions = {}) => {
         const newStates: Record<number, ServoState> = {};
 
         msg.name.forEach((name: string, index: number) => {
-          // Parse servo ID from name (e.g., "servo_1" or "joint_1")
-          const match = name.match(/\d+/);
-          if (match) {
-            const servoId = parseInt(match[0]);
-            newStates[servoId] = {
-              id: servoId,
-              angle: (msg.position[index] * 180) / Math.PI, // Convert from radians
-              velocity: msg.velocity?.[index] || 0,
-              effort: msg.effort?.[index] || 0,
-            };
-          }
+          // Primary mapping: explicit InMoov joint name -> unified servo ID
+          const mappedId = JOINT_NAME_TO_SERVO_ID[name];
+          const servoId =
+            mappedId !== undefined
+              ? mappedId
+              : (() => {
+                  // Fallback for legacy names like "servo_12"
+                  const match = name.match(/\d+/);
+                  return match ? parseInt(match[0], 10) : -1;
+                })();
+
+          if (servoId === -1) return;
+
+          newStates[servoId] = {
+            id: servoId,
+            angle: (msg.position[index] * 180) / Math.PI, // Convert from radians
+            velocity: msg.velocity?.[index] || 0,
+            effort: msg.effort?.[index] || 0,
+          };
         });
 
         setServoStates(newStates);
@@ -86,14 +94,16 @@ export const useServoControl = (options: UseServoControlOptions = {}) => {
    * Get head servo IDs (1-15)
    */
   const getHeadServoIds = (): number[] => {
-    return Array.from({ length: 15 }, (_, i) => i + 1);
+    // 0..16 + eye/iris visual chain 53..56
+    return [...Array.from({ length: 17 }, (_, i) => i), 53, 54, 55, 56];
   };
 
   /**
    * Get arm servo IDs (16-25)
    */
   const getArmServoIds = (): number[] => {
-    return Array.from({ length: 10 }, (_, i) => 16 + i);
+    // Arms + fingers + waist
+    return Array.from({ length: 36 }, (_, i) => 17 + i); // 17..52
   };
 
   /**

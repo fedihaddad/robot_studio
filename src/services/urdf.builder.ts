@@ -5,7 +5,73 @@ import { URDFRobot, URDFLink, URDFJoint } from './urdf.loader';
  * STL File Loader - Loads binary STL geometry
  */
 export class STLLoader {
+  private static geometryCache: Map<string, THREE.BufferGeometry> = new Map();
+  private static loadingPromises: Map<string, Promise<THREE.BufferGeometry>> = new Map();
+
   static async load(url: string): Promise<THREE.BufferGeometry> {
+    const cached = STLLoader.geometryCache.get(url);
+    if (cached) {
+      console.log(`[STLLoader] Cache hit: ${url}`);
+      return cached.clone();
+    }
+
+    const inFlight = STLLoader.loadingPromises.get(url);
+    if (inFlight) {
+      console.log(`[STLLoader] In-flight: ${url}`);
+      const geometry = await inFlight;
+      return geometry.clone();
+    }
+
+    const loadPromise = new Promise<THREE.BufferGeometry>((resolve, reject) => {
+      console.log(`[STLLoader] Starting fetch: ${url}`);
+      fetch(url, { 
+        headers: { 'Accept': '*/*' },
+        mode: 'cors' 
+      })
+        .then((response) => {
+          console.log(`[STLLoader] Response received for ${url}: status=${response.status} ok=${response.ok}`);
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          return response.arrayBuffer();
+        })
+        .then((buffer) => {
+          try {
+            console.log(`[STLLoader] Buffer received, size: ${buffer.byteLength} bytes`);
+            const geometry = STLLoader.parseSTL(buffer);
+            geometry.computeVertexNormals();
+            STLLoader.geometryCache.set(url, geometry);
+            console.log(`[STLLoader] ✓ Success: ${url} (vertices: ${geometry.attributes.position.count})`);
+            resolve(geometry);
+          } catch (error) {
+            console.error(`[STLLoader] Parse error for ${url}:`, error);
+            reject(new Error(`Failed to parse STL: ${error}`));
+          }
+        })
+        .catch((error) => {
+          console.error(`[STLLoader] Fetch error for ${url}:`, error);
+          reject(error);
+        })
+        .finally(() => {
+          STLLoader.loadingPromises.delete(url);
+        });
+    });
+
+    STLLoader.loadingPromises.set(url, loadPromise);
+    const geometry = await loadPromise;
+    return geometry.clone();
+  }
+
+  static clearCache(): void {
+    STLLoader.geometryCache.clear();
+    STLLoader.loadingPromises.clear();
+  }
+
+  static async preload(urls: string[]): Promise<void> {
+    await Promise.all(urls.map((url) => STLLoader.load(url).then(() => undefined)));
+  }
+
+  private static loadWithoutCache(url: string): Promise<THREE.BufferGeometry> {
     return new Promise((resolve, reject) => {
       console.log(`[STLLoader] Fetching: ${url}`);
       fetch(url)
@@ -35,20 +101,35 @@ export class STLLoader {
   }
 
   private static parseSTL(buffer: ArrayBuffer): THREE.BufferGeometry {
-    const view = new DataView(buffer);
-    const isASCII = STLLoader.isASCIISTL(buffer);
-
-    if (isASCII) {
-      return STLLoader.parseASCII(new TextDecoder().decode(buffer));
-    } else {
+    // Robust detection: many binary STL files also start with "solid".
+    if (STLLoader.isBinarySTL(buffer)) {
       return STLLoader.parseBinary(buffer);
     }
+
+    try {
+      const asciiGeometry = STLLoader.parseASCII(new TextDecoder().decode(buffer));
+      const positionAttr = asciiGeometry.getAttribute('position');
+      if (positionAttr && positionAttr.count > 0) {
+        return asciiGeometry;
+      }
+    } catch {
+      // Fallback to binary parser below.
+    }
+
+    return STLLoader.parseBinary(buffer);
   }
 
-  private static isASCIISTL(buffer: ArrayBuffer): boolean {
-    const view = new Uint8Array(buffer);
-    const header = new TextDecoder().decode(view.subarray(0, 5));
-    return header === 'solid';
+  private static isBinarySTL(buffer: ArrayBuffer): boolean {
+    if (buffer.byteLength < 84) {
+      return false;
+    }
+
+    const view = new DataView(buffer);
+    const faceCount = view.getUint32(80, true);
+    const expectedSize = 84 + (faceCount * 50);
+
+    // Binary STL has a strict layout size.
+    return expectedSize === buffer.byteLength;
   }
 
   private static parseBinary(arrayBuffer: ArrayBuffer): THREE.BufferGeometry {
@@ -179,6 +260,8 @@ export class URDFBuilder {
    * Create Three.js meshes for each link in the URDF
    */
   private async createLinkMeshes(): Promise<void> {
+    const failedMeshes: { name: string; error: string }[] = [];
+    
     for (const link of this.urdf.links) {
       const linkGroup = new THREE.Group();
       linkGroup.name = link.name;
@@ -188,7 +271,9 @@ export class URDFBuilder {
           this.log(`Loading mesh: ${link.name} from ${link.geometry.filename}`);
           
           const meshPath = this.resolveMeshPath(link.geometry.filename);
+          console.log(`[URDFBuilder] Resolved mesh path for ${link.name}: ${meshPath}`);
           this.log(`Resolved path: ${meshPath}`);
+          
           const geometry = await STLLoader.load(meshPath);
           
           const material = new THREE.MeshPhongMaterial({
@@ -212,6 +297,7 @@ export class URDFBuilder {
           this.applyVisualOrigin(mesh, link);
 
           linkGroup.add(mesh);
+          console.log(`[URDFBuilder] ✓ Successfully loaded: ${link.name}`);
           this.log(`✓ Loaded: ${link.name}`);
         } else if (link.geometry?.type === 'box') {
           // Create placeholder box geometry
@@ -247,10 +333,17 @@ export class URDFBuilder {
           linkGroup.add(mesh);
         }
       } catch (error) {
-        this.log(`⚠ Failed to load ${link.name}: ${error}`);
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.error(`[URDFBuilder] ✗ Failed to load ${link.name}:`, error);
+        this.log(`✗ Failed to load ${link.name}: ${errorMsg}`);
+        failedMeshes.push({ name: link.name, error: errorMsg });
       }
 
       this.linkMeshes.set(link.name, linkGroup);
+    }
+    
+    if (failedMeshes.length > 0) {
+      console.warn(`[URDFBuilder] ${failedMeshes.length} meshes failed to load:`, failedMeshes);
     }
   }
 
@@ -328,23 +421,43 @@ export class URDFBuilder {
       const withoutProtocol = filename.substring('package://'.length);
 
       if (withoutProtocol.startsWith('meshes/')) {
-        return `/${withoutProtocol}`;
+        return this.resolvePublicAssetPath(withoutProtocol);
       }
 
       const meshesIndex = withoutProtocol.indexOf('/meshes/');
       if (meshesIndex >= 0) {
-        return withoutProtocol.substring(meshesIndex);
+        return this.resolvePublicAssetPath(withoutProtocol.substring(meshesIndex + 1));
       }
 
       // Fallback: keep only the last segment under /meshes
       const meshFile = withoutProtocol.split('/').pop();
-      return `/meshes/${meshFile}`;
+      return this.resolvePublicAssetPath(`meshes/${meshFile}`);
     }
     if (filename.startsWith('file://')) {
       // Remove file:// protocol
       return filename.substring(7);
     }
     return filename;
+  }
+
+  private resolvePublicAssetPath(relativePath: string): string {
+    const normalized = relativePath.replace(/^\/+/, '');
+    
+    // For Electron apps running in file:// protocol
+    if (typeof window !== 'undefined' && window.location?.protocol === 'file:') {
+      // Try to resolve relative to app root
+      try {
+        // In Electron, assets in public/ are served from the app root
+        const electronPath = new URL(`file://${normalized}`, window.location.href).toString();
+        return electronPath;
+      } catch (e) {
+        // Fallback to simple path
+        return `${normalized}`;
+      }
+    }
+    
+    // For web/dev environment
+    return `/${normalized}`;
   }
 
   private applyVisualOrigin(mesh: THREE.Mesh, link: URDFLink): void {
