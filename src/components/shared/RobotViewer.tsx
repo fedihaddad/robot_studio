@@ -65,6 +65,10 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
   
   const { config } = useAppStore();
 
+  useEffect(() => {
+    rosServiceRef.current = propsRosService || rosServiceRef.current;
+  }, [propsRosService]);
+
   // Initialize Three.js scene and load URDF
   useEffect(() => {
     if (!mountRef.current) return;
@@ -169,28 +173,45 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
         };
 
         if (isConnected && rosServiceRef.current) {
-          setLoadingMessage('Loading URDF from ROS2...');
+          setLoadingMessage('Loading URDF from ROS2 /robot_description topic...');
+          console.log('[RobotViewer] Attempting to load URDF from ROS2...');
           try {
             urdfString = await rosServiceRef.current.loadURDF();
+            console.log('[RobotViewer] ✅ URDF loaded from ROS2 (length:', urdfString.length, 'bytes)');
+            if (urdfString.length < 100) {
+              console.warn('[RobotViewer] ⚠️ URDF seems too short, may be corrupt');
+            }
           } catch (rosError) {
-            console.warn('[URDF Viewer] Failed to load URDF from ROS2, falling back to local URDF:', rosError);
+            console.warn('[RobotViewer] ❌ Failed to load URDF from ROS2:', rosError);
+            console.log('[RobotViewer] Falling back to local URDF...');
+            setLoadingMessage('ROS2 URDF failed, loading local fallback...');
             urdfString = await loadLocalURDF();
+            console.log('[RobotViewer] ✅ Local URDF loaded (length:', urdfString.length, 'bytes)');
           }
         } else {
+          console.log('[RobotViewer] Not connected to ROS2, loading local URDF...');
+          setLoadingMessage('Loading local URDF (offline mode)...');
           urdfString = await loadLocalURDF();
         }
         
         setLoadingMessage('Parsing URDF...');
+        console.log('[RobotViewer] Parsing URDF...');
         const urdf = parseURDF(urdfString);
+        console.log('[RobotViewer] ✅ URDF parsed successfully');
+        console.log('[RobotViewer] Robot root:', urdf.robot?.$.name);
 
         // Build scene from URDF
         setLoadingMessage('Building 3D scene...');
+        console.log('[RobotViewer] Building 3D scene from URDF...');
         const builder = new URDFBuilder(urdf, (msg) => {
+          console.log('[RobotViewer]', msg);
           setLoadingMessage(msg);
-          console.log(`[URDF Build] ${msg}`);
         });
 
         const robotScene = await builder.build();
+        console.log('[RobotViewer] ✅ Robot scene built successfully');
+        console.log('[RobotViewer] Robot scene children count:', robotScene.children.length);
+        
         robotGroupRef.current = robotScene;
         
         // Fix z-up to y-up for InMoov (rotate 90 degrees around X axis)
@@ -199,6 +220,8 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
         
         scene.add(robotScene);
         urdfBuilderRef.current = builder;
+        
+        console.log('[RobotViewer] Robot added to scene at position:', robotScene.position);
         fitCameraToRobot(camera, robotScene, orbitTargetRef.current, 1.5);
         createOrUpdateHandHandles(scene, robotScene, handHandlesRef.current);
 
@@ -305,36 +328,35 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
     latestNamedJointsRef.current = jointStatesByName;
 
     const builder = urdfBuilderRef.current;
-    const jointMappings = jointMappingsRef.current;
-    const hasNamedJointStates = Object.keys(jointStatesByName).length > 0;
 
-    // Preferred path: full URDF update by ROS joint name (radians).
+    // Update joints silently (no spam)
     Object.entries(jointStatesByName).forEach(([jointName, angleRadians]) => {
       if (typeof angleRadians === 'number') {
         builder.updateJoint(jointName, angleRadians);
       }
     });
+  }, [joints, jointStatesByName]);
 
-    // Legacy path: servo-id mapped updates (degrees).
-    jointMappings.forEach((servoId, jointName) => {
-      if (joints[servoId] !== undefined) {
-        const angleRadians = THREE.MathUtils.degToRad(joints[servoId]);
-        builder.updateJoint(jointName, angleRadians);
-      }
+  // Direct ROS joint streaming fallback:
+  // apply /joint_states updates straight to URDF builder to avoid UI state race/staleness.
+  useEffect(() => {
+    if (!isConnected || isLoading || !rosServiceRef.current || !urdfBuilderRef.current) {
+      return;
+    }
+
+    const unsubscribe = rosServiceRef.current.subscribeToServoState((msg: any) => {
+      if (!msg?.name || !msg?.position || !urdfBuilderRef.current) return;
+
+      msg.name.forEach((jointName: string, index: number) => {
+        const angleRadians = msg.position[index];
+        if (typeof angleRadians === 'number') {
+          urdfBuilderRef.current?.updateJoint(jointName, angleRadians);
+        }
+      });
     });
 
-    if (debugMode) {
-      const activeJoints = Array.from(jointMappings.entries())
-        .filter(([_, id]) => joints[id] !== undefined)
-        .length;
-      const namedCount = Object.keys(jointStatesByName).length;
-      setDebugStats(
-        hasNamedJointStates
-          ? `Named joints: ${namedCount} | Servo-mapped: ${activeJoints}/${jointMappings.size}`
-          : `Active joints: ${activeJoints}/${jointMappings.size}`
-      );
-    }
-  }, [joints, jointStatesByName, debugMode]);
+    return () => unsubscribe?.();
+  }, [isConnected, isLoading, propsRosService]);
 
   const fitViewToRobot = () => {
     if (!cameraRef.current || !robotGroupRef.current) return;
@@ -489,7 +511,11 @@ function setupControls(
   };
 
   const onWheel = (e: WheelEvent) => {
-    if (shouldBlockInteraction?.()) return;
+    console.log('[RobotViewer] Wheel event:', e.deltaY);
+    if (shouldBlockInteraction?.()) {
+      console.log('[RobotViewer] Wheel blocked by shouldBlockInteraction');
+      return;
+    }
     e.preventDefault();
     onUserInteraction?.();
     const target = getOrbitTarget();
@@ -499,12 +525,18 @@ function setupControls(
     const currentDist = offset.length();
     const newDist = Math.max(0.1, Math.min(3, currentDist + e.deltaY * 0.0002));
 
+    console.log('[RobotViewer] Zoom: current distance:', currentDist.toFixed(2), '-> new:', newDist.toFixed(2));
+    
     camera.position.copy(target.clone().add(direction.multiplyScalar(newDist)));
     camera.lookAt(target);
   };
 
   domElement.addEventListener('mousedown', onMouseDown);
   domElement.addEventListener('mousemove', onMouseMove);
+  domElement.addEventListener('mouseup', onMouseUp);
+  domElement.addEventListener('wheel', onWheel, { passive: false });
+  
+  console.log('[RobotViewer setupControls] Wheel listener added with passive: false');
   domElement.addEventListener('mouseup', onMouseUp);
   domElement.addEventListener('wheel', onWheel, { passive: false });
 

@@ -249,6 +249,13 @@ export class URDFBuilder {
       this.buildKinematicTree();
 
       this.log('✓ URDF scene built successfully');
+      
+      // Diagnostic: log all registered joints
+      console.log(`[URDFBuilder] ========== JOINTS DIAGNOSTIC ==========`);
+      console.log(`[URDFBuilder] Total joints registered: ${this.jointObjects.size}`);
+      console.log(`[URDFBuilder] Joint names:`, Array.from(this.jointObjects.keys()));
+      console.log(`[URDFBuilder] ================================================`);
+      
       return this.scene;
     } catch (error) {
       this.log(`✗ Error building URDF scene: ${error}`);
@@ -478,7 +485,9 @@ export class URDFBuilder {
    */
   updateJoint(jointName: string, angle: number): void {
     const jointGroup = this.jointObjects.get(jointName);
-    if (!jointGroup) return;
+    if (!jointGroup) {
+      return;
+    }
 
     const axis = (jointGroup as any)._rotationAxis || [0, 0, 1];
     const baseQuaternion = (jointGroup as any)._baseQuaternion as THREE.Quaternion | undefined;

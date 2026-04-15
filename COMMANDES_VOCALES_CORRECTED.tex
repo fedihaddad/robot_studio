@@ -1,0 +1,40 @@
+\subsection{Logique de décision et interprétation des commandes}
+
+Après le traitement du langage naturel par l'API Gemini, la réponse est analysée pour déterminer le type d'action à exécuter.
+
+\begin{table}[H]
+\centering
+\caption{Correspondance entre commandes vocales et actions}
+\begin{tabular}{|c|c|}
+\hline
+\textbf{Commande vocale} & \textbf{Action exécutée} \\
+\hline
+``ouvre la bouche'' & Ouverture mâchoire \\
+``ferme la bouche'' & Fermeture mâchoire \\
+``regarde à gauche'' & Yeux à gauche \\
+``regarde à droite'' & Yeux à droite \\
+``fais une expression joyeuse'' & Expression faciale \\
+Question & Réponse vocale \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{verbatim}
+if intent == "ouvrir_bouche":
+    publier("/axel/intent_action", IntentAction(
+        action_type="jaw", function_name="ouvrir_bouche"))
+elif intent == "fermer_bouche":
+    publier("/axel/intent_action", IntentAction(
+        action_type="jaw", function_name="fermer_bouche"))
+elif intent == "regarder_gauche":
+    publier("/axel/intent_action", IntentAction(
+        action_type="eyes", function_name="regarder_gauche"))
+elif intent == "regarder_droite":
+    publier("/axel/intent_action", IntentAction(
+        action_type="eyes", function_name="regarder_droite"))
+elif intent == "expression_joie":
+    publier("/axel/intent_action", IntentAction(
+        action_type="expression", function_name="expression_joie"))
+else:
+    publier("/audio/output", "réponse vocale")
+\end{verbatim}

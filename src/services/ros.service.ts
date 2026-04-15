@@ -14,7 +14,13 @@ declare global {
 
 export class ROSService {
   private ros: any;
-  private subscribers: Map<string, any> = new Map();
+  private subscribers: Map<
+    string,
+    {
+      topic: any;
+      callbacks: Set<(msg: any) => void>;
+    }
+  > = new Map();
   private publishers: Map<string, any> = new Map();
   private topicCache: Map<string, any> = new Map();
   private isConnectedFlag = false;
@@ -48,15 +54,19 @@ export class ROSService {
   }
 
   disconnect(): void {
-    this.subscribers.forEach(sub => sub.unsubscribe());
+    this.subscribers.forEach((entry) => entry.topic.unsubscribe());
+    this.subscribers.clear();
     this.publishers.forEach(pub => pub.unsubscribe());
+    this.topicCache.clear();
     if (this.ros) {
       this.ros.close();
     }
   }
 
   subscribe(topic: string, messageType: string, callback: (msg: any) => void): void {
-    if (this.subscribers.has(topic)) {
+    const existing = this.subscribers.get(topic);
+    if (existing) {
+      existing.callbacks.add(callback);
       return;
     }
 
@@ -66,20 +76,36 @@ export class ROSService {
       messageType: messageType,
     });
 
+    const callbacks = new Set<(msg: any) => void>();
+    callbacks.add(callback);
+
     subscriber.subscribe((msg: any) => {
       this.topicCache.set(topic, { message: msg, timestamp: Date.now() });
-      callback(msg);
+      callbacks.forEach((cb) => cb(msg));
     });
-    this.subscribers.set(topic, subscriber);
+
+    this.subscribers.set(topic, {
+      topic: subscriber,
+      callbacks,
+    });
   }
 
-  unsubscribe(topic: string): void {
+  unsubscribe(topic: string, callback?: (msg: any) => void): void {
     const subscriber = this.subscribers.get(topic);
-    if (subscriber) {
-      subscriber.unsubscribe();
-      this.subscribers.delete(topic);
-      this.topicCache.delete(topic);
+    if (!subscriber) {
+      return;
     }
+
+    if (callback) {
+      subscriber.callbacks.delete(callback);
+      if (subscriber.callbacks.size > 0) {
+        return;
+      }
+    }
+
+    subscriber.topic.unsubscribe();
+    this.subscribers.delete(topic);
+    this.topicCache.delete(topic);
   }
 
   publish(topic: string, messageType: string, message: any): void {
@@ -270,14 +296,15 @@ export class ROSService {
   ): (() => void) | undefined {
     if (!callback) {
       // If no callback provided, still subscribe but just cache
-      this.subscribe('/joint_states', 'sensor_msgs/JointState', (msg: any) => {
+      const noopCallback = (_msg: any) => {
         // Cache the message
-      });
-      return () => this.unsubscribe('/joint_states');
+      };
+      this.subscribe('/joint_states', 'sensor_msgs/JointState', noopCallback);
+      return () => this.unsubscribe('/joint_states', noopCallback);
     }
 
     this.subscribe('/joint_states', 'sensor_msgs/JointState', callback);
-    return () => this.unsubscribe('/joint_states');
+    return () => this.unsubscribe('/joint_states', callback);
   }
 
   /**
@@ -295,33 +322,216 @@ export class ROSService {
   }
 
   /**
+   * Subscribe to MarkerArray (scene objects, obstacles, goals)
+   */
+  subscribeToMarkerArray(callback: (markers: any[]) => void): void {
+    this.subscribe(
+      '/axel/scene_markers',
+      'visualization_msgs/MarkerArray',
+      (msg: any) => {
+        callback(msg.markers || []);
+      }
+    );
+  }
+
+  /**
+   * Subscribe to Marker (single marker updates)
+   */
+  subscribeToMarker(callback: (marker: any) => void): void {
+    this.subscribe(
+      '/visualization_marker',
+      'visualization_msgs/Marker',
+      (msg: any) => {
+        callback(msg);
+      }
+    );
+  }
+
+  /**
+   * Subscribe to TF transforms (coordinate frames)
+   */
+  subscribeToTF(callback: (transforms: any[]) => void): void {
+    this.subscribe(
+      '/tf',
+      'tf2_msgs/TFMessage',
+      (msg: any) => {
+        callback(msg.transforms || []);
+      }
+    );
+  }
+
+  /**
+   * Subscribe to static TF transforms
+   */
+  subscribeToTFStatic(callback: (transforms: any[]) => void): void {
+    this.subscribe(
+      '/tf_static',
+      'tf2_msgs/TFMessage',
+      (msg: any) => {
+        callback(msg.transforms || []);
+      }
+    );
+  }
+
+  /**
+   * Subscribe to collision state (self-collision detection)
+   */
+  subscribeToCollisionState(callback: (collisionPairs: any[]) => void): void {
+    this.subscribe(
+      '/monitored_planning_scene',
+      'moveit_msgs/PlanningScene',
+      (msg: any) => {
+        if (msg.robot_state && msg.robot_state.is_diff) {
+          // Extract collision state if available
+          callback(msg.allowed_collisions || []);
+        }
+      }
+    );
+  }
+
+  /**
+   * Subscribe to trajectories (motion plans)
+   */
+  subscribeToTrajectory(callback: (trajectory: any) => void): void {
+    this.subscribe(
+      '/execute_trajectory/state',
+      'control_msgs/FollowJointTrajectoryActionResult',
+      (msg: any) => {
+        callback(msg.result || msg);
+      }
+    );
+  }
+
+  /**
+   * Publish trajectory for execution
+   */
+  publishTrajectory(jointNames: string[], points: any[]): void {
+    const trajectory = {
+      joint_names: jointNames,
+      points: points,
+    };
+
+    this.publish(
+      '/execute_trajectory/goal',
+      'control_msgs/FollowJointTrajectoryActionGoal',
+      {
+        goal: {
+          trajectory: trajectory,
+        },
+      }
+    );
+  }
+
+  /**
    * Load URDF robot description from ROS2
-   * Fetches /robot_description parameter and returns URDF XML string
+   * Try multiple strategies:
+   * 1. robot_state_publisher:robot_description (ROS2 node-scoped)
+   * 2. /robot_description (global parameter)
+   * 3. Subscribe to /robot_description topic as fallback
    */
   async loadURDF(): Promise<string> {
     return new Promise((resolve, reject) => {
-      try {
-        // Use ROS2 parameter service to get robot_description
-        const param = new window.ROSLIB.Param({
+      let timeoutHandle: any = null;
+      let resolved = false;
+
+      const cleanup = () => {
+        resolved = true;
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+      };
+
+      const attemptParameterLoad = (paramName: string, isSecondAttempt = false) => {
+        console.log(`[ROSService] Attempt ${isSecondAttempt ? 2 : 1}: Loading URDF from parameter: ${paramName}`);
+        
+        const urdfParam = new window.ROSLIB.Param({
           ros: this.ros,
-          name: 'robot_description',
+          name: paramName,
         });
 
-        param.get((value: string) => {
-          if (!value) {
-            reject(new Error('robot_description parameter is empty'));
-            return;
+        // Log when get() is called
+        console.log(`[ROSService] Calling urdfParam.get() for: ${paramName}`);
+
+        urdfParam.get(
+          (urdfString: any) => {
+            console.log(`[ROSService] ✅ urdfParam.get() callback fired for ${paramName}`);
+            
+            if (resolved) return;
+            
+            if (!urdfString || (typeof urdfString === 'string' && urdfString.trim().length === 0)) {
+              console.warn(`[ROSService] ⚠️ Parameter ${paramName} is empty, trying fallback...`);
+              if (!isSecondAttempt) {
+                attemptParameterLoad('/robot_description', true);
+              } else {
+                attemptTopicFallback();
+              }
+              return;
+            }
+
+            cleanup();
+            console.log('[ROSService] ✅ URDF loaded successfully from parameter');
+            console.log('[ROSService] URDF length:', urdfString.length, 'bytes');
+            console.log('[ROSService] URDF first 300 chars:', urdfString.substring(0, 300));
+            resolve(urdfString);
+          },
+          (error: any) => {
+            console.warn(`[ROSService] Parameter ${paramName} get() error:`, error);
+            if (!isSecondAttempt && !resolved) {
+              attemptParameterLoad('/robot_description', true);
+            } else if (resolved === false) {
+              attemptTopicFallback();
+            }
           }
-          resolve(value);
+        );
+      };
+
+      const attemptTopicFallback = () => {
+        if (resolved) return;
+        
+        console.log('[ROSService] Falling back to topic subscription: /robot_description');
+        
+        const topicListener = new window.ROSLIB.Topic({
+          ros: this.ros,
+          name: '/robot_description',
+          messageType: 'std_msgs/String',
         });
 
-        // Timeout after 5 seconds
+        topicListener.subscribe((msg: any) => {
+          console.log('[ROSService] ✅ Received URDF from /robot_description topic');
+          if (resolved) return;
+          
+          const urdfString = msg.data || msg;
+          if (urdfString && urdfString.length > 0) {
+            cleanup();
+            console.log('[ROSService] URDF length:', urdfString.length, 'bytes');
+            resolve(urdfString);
+            topicListener.unsubscribe();
+          }
+        });
+
+        // Topic fallback timeout
         setTimeout(() => {
-          reject(new Error('URDF load timeout - robot_description not found'));
+          if (!resolved) {
+            console.error('[ROSService] ❌ Topic fallback also timed out');
+            topicListener.unsubscribe();
+            reject(new Error('URDF loading failed: parameter unavailable and topic subscription timed out'));
+          }
         }, 5000);
-      } catch (error) {
-        reject(error);
-      }
+      };
+
+      // Start with ROS2 node-scoped parameter
+      attemptParameterLoad('robot_state_publisher:robot_description', false);
+
+      // Primary timeout (10 seconds total for all attempts)
+      timeoutHandle = setTimeout(() => {
+        if (!resolved) {
+          console.error('[ROSService] ⚠️ Timeout: All URDF loading attempts failed after 10 seconds');
+          console.info('[ROSService] Diagnostics:');
+          console.info('[ROSService] - Verify robot_state_publisher is running: ros2 node list');
+          console.info('[ROSService] - Check parameter exists: ros2 param list | grep description');
+          console.info('[ROSService] - Check parameter value: ros2 param get robot_state_publisher robot_description');
+          cleanup();
+          reject(new Error('URDF loading failed: parameter and topic unavailable'));
+        }
+      }, 10000);
     });
   }
 }

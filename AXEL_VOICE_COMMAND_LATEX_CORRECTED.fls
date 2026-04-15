@@ -1,0 +1,13 @@
+PWD c:/Users/fedi haddad/Desktop/pfe/Rapport/axel-dashboard
+INPUT c:/texlive/2026/texmf.cnf
+INPUT c:/texlive/2026/texmf-dist/web2c/texmf.cnf
+INPUT c:/texlive/2026/texmf-var/web2c/pdftex/pdflatex.fmt
+INPUT c:/Users/fedi haddad/Desktop/pfe/Rapport/axel-dashboard/AXEL_VOICE_COMMAND_LATEX_CORRECTED.tex
+OUTPUT AXEL_VOICE_COMMAND_LATEX_CORRECTED.log
+INPUT c:/texlive/2026/texmf-dist/tex/latex/base/article.cls
+INPUT c:/texlive/2026/texmf-dist/tex/latex/base/article.cls
+INPUT c:/texlive/2026/texmf-dist/tex/latex/base/size10.clo
+INPUT c:/texlive/2026/texmf-dist/tex/latex/base/size10.clo
+INPUT c:/texlive/2026/texmf-dist/tex/latex/base/size10.clo
+INPUT c:/texlive/2026/texmf-dist/tex/latex/base/inputenc.sty
+INPUT c:/texlive/2026/texmf-dist/tex/latex/base/inputenc.sty

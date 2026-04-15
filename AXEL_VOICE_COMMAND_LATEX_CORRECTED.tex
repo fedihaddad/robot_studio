@@ -1,0 +1,488 @@
+% ═══════════════════════════════════════════════════════════════════════════════
+% AXEL VOICE COMMAND PROCESSING - CORRECT IMPLEMENTATION
+% Based on actual AXEL robot source code (action_manager_node.py, axel_msgs)
+% 
+% This document corrects generic pseudocode with actual ROS2 topics, message types,
+% and the priority-based action queuing system
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\documentclass{article}
+\usepackage[utf-8]{inputenc}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+\lstset{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red},
+    breaklines=true,
+    showstringspaces=false,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny,
+    tabsize=2,
+}
+
+\title{AXEL Humanoid Robot: Voice Command Processing Pipeline}
+\author{Based on Actual ROS2 Implementation}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Voice Command Architecture}
+
+The AXEL humanoid robot uses a multi-stage voice command pipeline:
+
+\begin{enumerate}
+    \item \textbf{Gemini LLM}: Processes natural language voice input
+    \item \textbf{IntentAction Publisher}: Converts LLM intent to structured ROS2 message
+    \item \textbf{Action Manager Node}: Priority-based queue with conflict resolution
+    \item \textbf{Specialized Dispatchers}: Routes to HeadCommand, HandCommand, or ArmCommand
+    \item \textbf{ESP32 Bridge}: Translates to hardware-specific servo commands
+\end{enumerate}
+
+\section{ROS2 Topic Architecture}
+
+\subsection{Core Topics}
+
+\begin{lstlisting}
+# INPUT: LLM -> Action Manager
+/axel/intent_action          # Topic: IntentAction message
+  - source: "gemini" | "behavior_tree" | "user_override" | "health_monitor"
+  - action_type: "head" | "eyes" | "jaw" | "hand" | "arm" | "expression" | etc.
+  - function_name: French command name (e.g., "ouvrir_bouche", "tete_gauche")
+  - priority: 0 (LOW) to 3 (CRITICAL)
+  - parameters_json: Additional joint/gesture parameters
+
+# OUTPUT: Action Manager -> Execution Subsystems
+/axel/head/cmd               # Topic: HeadCommand message
+/axel/hands/cmd              # Topic: HandCommand message
+/axel/arms/cmd               # Topic: ArmCommand message
+/axel/action_feedback        # Topic: ActionFeedback message (status update)
+\end{lstlisting}
+
+\section{Gemini-to-ESP32 Command Mapping}
+
+The AXEL system maps natural language commands to 50+ hardware-specific ESP32 commands:
+
+\begin{lstlisting}
+GEMINI_TO_ESP32 = {
+    # Eye Movement
+    "regarder_gauche":      "gauche",
+    "regarder_droite":      "droite",
+    "regarder_haut":        "haut",
+    "regarder_bas":         "bas",
+    "yeux_centre":          "centre",
+    
+    # Mouth/Jaw
+    "ouvrir_bouche":        "ouvrir_bouche",
+    "fermer_bouche":        "fermer_bouche",
+    "ouvrir la bouche":     "ouvrir_bouche",    # Natural speech variant
+    
+    # Head Positioning
+    "tete_gauche":          "extra_gauche",
+    "tete_droite":          "extra_droite",
+    "tete_centre":          "extra_centre",
+    "tourner a gauche":     "extra_gauche",
+    
+    # Expressions (multi-servos)
+    "expression_joie":      "expression_joie",
+    "expression_triste":    "expression_triste",
+    "expression_colere":    "expression_colere",
+    "expression_surpris":   "expression_surpris",
+    
+    # Eyebrows
+    "hajeb_haut":           "hajeb_haut",
+    "hajeb_bas":            "hajeb_bas",
+    "hajeb_gauche_haut":    "hajeb_l_up",
+    
+    # Hand Gestures
+    "ouvrir_main_droite":   "main_droite_ouvrir",
+    "fermer_main_gauche":   "main_gauche_fermer",
+    "thumbs_up":            "thumbs_up",
+    "peace_sign":           "peace",
+    
+    # (50+ total commands...)
+}
+\end{lstlisting}
+
+\section{Action Manager State Machine}
+
+\subsection{Body Group Mapping}
+
+\begin{lstlisting}
+ACTION_TYPE_TO_GROUPS = {
+    "head":       ["head"],
+    "eyes":       ["eyes"],
+    "jaw":        ["jaw"],
+    "expression": ["head", "eyes", "jaw"],  # Affects multiple servos
+    "hand":       ["right_hand"] | ["left_hand"] | ["right_hand", "left_hand"],
+    "arm":        ["right_arm"] | ["left_arm"],
+    "torso":      ["torso", "neck"],
+    "vision":     ["vision"],              # NON-BLOCKING
+    "speech":     ["speech"],              # NON-BLOCKING
+    "system":     ["system"],              # NON-BLOCKING
+}
+
+NON_BLOCKING_GROUPS = ["vision", "speech", "system"]
+\end{lstlisting}
+
+\subsection{Priority Levels}
+
+\begin{lstlisting}
+Priority = {
+    0: "LOW",      # General animations, idle behaviors
+    1: "NORMAL",   # Regular commands (default)
+    2: "HIGH",     # Important user commands
+    3: "CRITICAL", # Safety-critical (e.g., emergency stop)
+}
+\end{lstlisting}
+
+\section{Complete Voice Command Processing Algorithm}
+
+\begin{algorithm}
+\caption{AXEL Voice Command Processing Pipeline}
+\begin{algorithmic}[1]
+
+\Procedure{ProcessVoiceCommand}{voiceInput}
+    \State $\text{intent} \gets \text{GeminiLLM.processNaturalLanguage}(\text{voiceInput})$
+    \State $\text{functionName} \gets \text{intent.getFunction}()$ \Comment{e.g., "ouvrir\_bouche"}
+    \State $\text{priority} \gets \text{intent.getPriority}()$ \Comment{$0..3$}
+    
+    \State \textbf{create} $\text{IntentAction}$ message
+    \State $\text{msg.source} \gets$ "gemini"
+    \State $\text{msg.action\_type} \gets \text{mapActionType}(\text{functionName})$
+    \State $\text{msg.function\_name} \gets \text{functionName}$
+    \State $\text{msg.priority} \gets \text{priority}$
+    \State $\text{msg.parameters\_json} \gets$ additionalParams
+    
+    \State \textbf{publish} $\text{msg}$ to `/axel/intent_action`
+    
+\EndProcedure
+
+\newline
+
+\Procedure{ActionManager\_OnIntentAction}{msg}
+    \State $\text{bodyGroups} \gets \text{resolveBodyGroups}(\text{msg.action\_type})$
+    
+    \If{$\text{noBodyGroupsResolved}(\text{bodyGroups})$}
+        \State \textbf{publish} `ActionFeedback` with status="failed"
+        \State \textbf{return}
+    \EndIf
+    
+    \State \textbf{create} $\text{QueuedAction}$ entry
+    \State $\text{action.priority} \gets \text{msg.priority}$
+    \State $\text{action.body\_groups} \gets \text{bodyGroups}$
+    \State $\text{action.timeout} \gets \text{msg.timeout} \lor \text{DEFAULT\_TIMEOUT}$
+    
+    \State \textbf{enqueue}($\text{action}$) \Comment{Per body group}
+    \State \textbf{checkPreemption}($\text{action}$) \Comment{Cancel lower-priority running actions}
+    
+\EndProcedure
+
+\newline
+
+\Procedure{DispatchTick}{} \Comment{Called at 20 Hz}
+    \For{each $\text{bodyGroup}$ in queues}
+        \If{$\text{activeAction}[\text{bodyGroup}] \neq \text{null}$} \textbf{and} bodyGroup not in NON\_BLOCKING
+            \State \textbf{continue} \Comment{Wait for action to complete}
+        \EndIf
+        
+        \If{queue[$\text{bodyGroup}$] is empty}
+            \State \textbf{continue}
+        \EndIf
+        
+        \State $\text{action} \gets$ queue[$\text{bodyGroup}$].pop() \Comment{Highest priority}
+        
+        \If{$\text{action.timeout} < \text{now()}$}
+            \State \textbf{publish} `ActionFeedback` with status="timeout"
+            \State \textbf{continue}
+        \EndIf
+        
+        \If{$\neg \text{allBodyGroupsAvailable}(\text{action})$}
+            \State queue[$\text{bodyGroup}$].insert(0, action) \Comment{Requeue}
+            \State \textbf{continue}
+        \EndIf
+        
+        \State $\text{action.status} \gets$ "running"
+        \State $\text{activeAction}[\text{bodyGroup}] \gets \text{action}$
+        
+        \State \textbf{dispatchAction}($\text{action}$) \Comment{Send to executor}
+        
+    \EndFor
+\EndProcedure
+
+\newline
+
+\Procedure{DispatchAction}{action}
+    \State $\text{esp32Cmd} \gets$ GEMINI\_TO\_ESP32[$\text{action.function\_name}$]
+    
+    \Switch{$\text{action.action\_type}$}
+        \Case{"head", "eyes", "jaw", "expression"}
+            \State $\text{msg} \gets$ createHeadCommand()
+            \State $\text{msg.expression} \gets \text{esp32Cmd}$
+            \State $\text{msg.command\_type} \gets$ "expression" \textbf{or} "position"
+            \State $\text{msg.priority} \gets \text{action.priority}$
+            \State \textbf{publish} $\text{msg}$ to `/axel/head/cmd`
+        \EndCase
+        
+        \Case{"hand"}
+            \State $\text{msg} \gets$ createHandCommand()
+            \State $\text{msg.side} \gets$ parameters["side"] \Comment{"left" | "right" | "both"}
+            \State $\text{msg.command\_type} \gets$ parameters["command\_type"]
+            \State $\{\text{thumb}, \text{index}, \ldots, \text{pinky}\} \gets$ parameters
+            \State \textbf{publish} $\text{msg}$ to `/axel/hands/cmd`
+        \EndCase
+        
+        \Case{"arm"}
+            \State $\text{msg} \gets$ createArmCommand()
+            \State $\text{msg.side} \gets$ parameters["side"]
+            \State $\text{msg.command\_type} \gets$ "position" \textbf{or} "trajectory" \textbf{or} "moveit"
+            \State $\{\text{shoulder\_lift}, \text{elbow\_flex}, \ldots\} \gets$ parameters
+            \State \textbf{publish} $\text{msg}$ to `/axel/arms/cmd`
+        \EndCase
+        
+        \Case{"vision", "speech", "system"}
+            \State \textbf{completeAction}(action, "succeeded") \Comment{Non-blocking}
+        \EndCase
+        
+    \EndSwitch
+    
+    \State \textbf{publish} `ActionFeedback` with status="running"
+\EndProcedure
+
+\end{algorithmic}
+\end{algorithm}
+
+\section{Message Definitions}
+
+\subsection{IntentAction Message (Input from Gemini)}
+
+\begin{lstlisting}
+# File: robot/axel_msgs/msg/IntentAction.msg
+builtin_interfaces/Time stamp
+string action_id              # Unique action identifier
+string source                 # "gemini" | "behavior_tree" | "user_override"
+string action_type            # "head" | "hand" | "arm" | "expression" | etc.
+string function_name          # French command (e.g., "ouvrir_bouche")
+string parameters_json        # Additional parameters as JSON
+uint8 priority 1              # 0=LOW, 1=NORMAL, 2=HIGH, 3=CRITICAL
+bool cancelable true          # Can user override?
+float64 timeout 0.0           # Seconds (0.0 = no timeout)
+\end{lstlisting}
+
+\subsection{HeadCommand Message (ESP32 #1 Control)}
+
+\begin{lstlisting}
+# File: robot/axel_msgs/msg/HeadCommand.msg
+builtin_interfaces/Time stamp
+string command_type           # "position" | "velocity" | "expression"
+string mode "absolute"        # "absolute" | "relative" | "trajectory"
+string expression             # ESP32 command name (e.g., "ouvrir_bouche")
+float64 head_pan        -1.0  # [-π, π] radians, -1.0 = not specified
+float64 head_tilt       -1.0
+float64 head_roll       -1.0
+float64 jaw             -1.0  # [0.0=closed, 1.0=open]
+float64 eyes_pan        -1.0  # [-π, π]
+float64 eyes_tilt       -1.0
+float64 left_eye_lid    -1.0  # [0.0=open, 1.0=closed]
+float64 right_eye_lid   -1.0
+uint8 priority 1
+\end{lstlisting}
+
+\subsection{ActionFeedback Message (Status Output)}
+
+\begin{lstlisting}
+# File: robot/axel_msgs/msg/ActionFeedback.msg
+builtin_interfaces/Time stamp
+string action_id              # Corresponds to IntentAction.action_id
+string status                 # "pending" | "running" | "succeeded" | 
+                              # "failed" | "cancelled" | "timeout"
+float64 progress 0.0          # [0.0, 1.0]
+string message                # Human-readable status
+float64 execution_time 0.0    # Elapsed time in seconds
+string error_type             # "unknown_action_type" | "queue_full" | etc.
+string error_detail           # Detailed error description
+\end{lstlisting}
+
+\section{Complete Python Implementation Example}
+
+\begin{lstlisting}
+# Simplified example: Processing voice -> Robot action
+import rclpy
+from rclpy.node import Node
+from axel_msgs.msg import IntentAction, ActionFeedback, HeadCommand
+
+class VoiceCommandProcessor(Node):
+    def __init__(self):
+        super().__init__("voice_command_processor")
+        
+        self.intent_pub = self.create_publisher(
+            IntentAction, "/axel/intent_action", 10
+        )
+        self.feedback_sub = self.create_subscription(
+            ActionFeedback, "/axel/action_feedback",
+            self.feedback_callback, 10
+        )
+    
+    def voice_to_intent(self, voice_input: str, priority: int = 1):
+        """Convert Gemini LLM output to IntentAction."""
+        
+        # Map voice command to system function
+        command_map = {
+            "ouvre la bouche": ("ouvrir_bouche", "expression"),
+            "ferme la bouche": ("fermer_bouche", "expression"),
+            "regarde à gauche": ("regarder_gauche", "eyes"),
+            "fais une expression joyeuse": ("expression_joie", "expression"),
+            "lève le bras droit": ("lift_arm", "arm"),
+        }
+        
+        func_name, action_type = command_map.get(
+            voice_input.lower(), ("unknown", "system")
+        )
+        
+        # Create IntentAction
+        msg = IntentAction()
+        msg.stamp = self.get_clock().now().to_msg()
+        msg.action_id = f"voice_{int(time.time() * 1000)}"
+        msg.source = "gemini"
+        msg.action_type = action_type
+        msg.function_name = func_name
+        msg.priority = priority  # Priority can be elevated by user/system
+        msg.parameters_json = '{"side": "right"}'  # For arm/hand commands
+        
+        # Publish to Action Manager
+        self.intent_pub.publish(msg)
+        self.get_logger().info(
+            f"📤 Sent: {func_name} (priority={priority})"
+        )
+    
+    def feedback_callback(self, msg: ActionFeedback):
+        """Monitor action execution."""
+        self.get_logger().info(
+            f"📨 Feedback [{msg.action_id}]: {msg.status} "
+            f"(progress={msg.progress:.0%})"
+        )
+        
+        if msg.status == "failed":
+            self.get_logger().error(
+                f"❌ Action failed: {msg.error_type} - {msg.error_detail}"
+            )
+
+# Usage
+if __name__ == "__main__":
+    rclpy.init()
+    node = VoiceCommandProcessor()
+    
+    # Examples
+    node.voice_to_intent("ouvre la bouche", priority=1)
+    node.voice_to_intent("fais une expression joyeuse", priority=1)
+    node.voice_to_intent("lève le bras droit", priority=2)
+    
+    rclpy.spin(node)
+\end{lstlisting}
+
+\section{Conflict Resolution & Preemption}
+
+When multiple commands target overlapping body groups, the Action Manager follows:
+
+\begin{enumerate}
+    \item \textbf{Priority Check}: Higher priority action preempts lower priority
+    \item \textbf{Body Group Lock}: Non-blocking groups (vision, speech, system) execute immediately
+    \item \textbf{Queue Management}: Max 5 actions per blocking body group; lowest priority evicted if queue full
+    \item \textbf{Timeout Handling}: Actions expire after default 30 seconds (configurable)
+    \item \textbf{MoveIt Safety}: IntentActions blocked when MoveIt trajectory execution is active
+\end{enumerate}
+
+\section{Deployment Architecture}
+
+\subsection{ROS2 Node Graph}
+
+\begin{lstlisting}
+Gemini LLM
+    ↓
+    └─→ [/axel/intent_action] 
+         ↓
+    ActionManagerNode
+         ├─→ [/axel/head/cmd] → ESP32 #1 (Head/Eyes/Mouth)
+         ├─→ [/axel/hands/cmd] → ESP32 #2 (Hands/Wrist)
+         ├─→ [/axel/arms/cmd] → ESP32 #3 (Arms/Torso)
+         └─→ [/axel/action_feedback] → Dashboard/Monitor
+
+Monitor/Dashboard
+    ↓
+    └─→ [/axel/action_feedback] (subscribe)
+\end{lstlisting}
+
+\subsection{Connection Details}
+
+\begin{lstlisting}
+# ROS2 Middleware Configuration
+rosbridge_server:
+  - URL: ws://192.168.1.X:9090  (configurable in src/services/config.service.ts:61)
+  - Topics: /axel/intent_action, /axel/action_feedback, /axel/head/cmd, etc.
+  - QoS: RELIABLE, VOLATILE, depth=10
+
+ROS2 Network:
+  - DDS_DOMAIN_ID: 0 (default)
+  - ROS2 API: rclpy (Python), rclcpp (C++)
+  - Message Serialization: CDR format
+\end{lstlisting}
+
+\section{Key Differences from Generic Pseudocode}
+
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Generic (Wrong)} & \textbf{AXEL Actual} & \textbf{Note} \\
+\hline
+publish("/robot/cmd", "forward") & publish("/axel/head/cmd", & ROS2 topics are specific \\
+& HeadCommand()) & to robot hardware \\
+\hline
+if intent == "move\_forward" & if action\_type == "arm": & AXEL uses semantic types \\
+& ArmCommand(command\_type="moveit") & + structured messages \\
+\hline
+priority = 0/1 & priority = 0-3 with & 4 priority levels with \\
+& preemption & active preemption \\
+\hline
+Simple queue & Per-group queues with & Conflict resolution via \\
+& conflict resolution & body group locking \\
+\hline
+String parameters & JSON parameters + & Hybrid: direct commands \\
+& message-specific fields & + structured parameters \\
+\hline
+No feedback & ActionFeedback + TTL & Real-time status monitoring \\
+\hline
+\end{tabular}
+
+\section{Integration with Dashboard}
+
+The dashboard monitors command execution via:
+
+\begin{lstlisting}
+// src/services/ros.service.ts
+subscribeToActionFeedback(callback) {
+    this.ros.Topic({
+        name: '/axel/action_feedback',
+        messageType: 'axel_msgs/ActionFeedback',
+        throttle_rate: 50,  // 20 Hz updates
+        queue_length: 5
+    });
+}
+
+// React component receives live feedback
+<ActionMonitor 
+    feedback={actionFeedback} 
+    isExecuting={actionFeedback.status === "running"}
+/>
+\end{lstlisting}
+
+\end{document}

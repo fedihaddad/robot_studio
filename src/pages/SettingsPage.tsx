@@ -39,10 +39,45 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     setTimeout(() => setSaveMessage(null), 3000);
   };
 
+  const handleTestConnection = async (url: string, label: string) => {
+    setSaveMessage(`🧪 Testing ${label}...`);
+    const success = await testConnection(url);
+    if (success) {
+      setSaveMessage(`✅ ${label} connected successfully!`);
+    } else {
+      setSaveMessage(`❌ ${label} connection failed. Check the URL and ensure the service is running.`);
+    }
+    setTimeout(() => setSaveMessage(null), 5000);
+  };
+
   const testConnection = async (url: string) => {
     try {
-      const response = await fetch(url, { method: 'HEAD', mode: 'no-cors' });
-      return true;
+      // Check if it's a WebSocket URL
+      if (url.startsWith('ws://') || url.startsWith('wss://')) {
+        // Test WebSocket connection
+        return new Promise((resolve) => {
+          const ws = new WebSocket(url);
+          const timeout = setTimeout(() => {
+            ws.close();
+            resolve(false);
+          }, 3000);
+
+          ws.onopen = () => {
+            clearTimeout(timeout);
+            ws.close();
+            resolve(true);
+          };
+
+          ws.onerror = () => {
+            clearTimeout(timeout);
+            resolve(false);
+          };
+        });
+      } else {
+        // Test HTTP connection
+        const response = await fetch(url, { method: 'HEAD', mode: 'no-cors' });
+        return true;
+      }
     } catch (error) {
       return false;
     }
@@ -97,7 +132,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                     placeholder="e.g., 192.168.1.100"
                   />
                   <button
-                    onClick={() => testConnection(`http://${formData.robotIp}:8080`)}
+                    onClick={() => handleTestConnection(`http://${formData.robotIp}:8080`, 'Camera Stream')}
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded font-medium transition-colors whitespace-nowrap"
                   >
                     🧪 Test
@@ -127,7 +162,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                     placeholder="ws://192.168.1.100:9090"
                   />
                   <button
-                    onClick={() => testConnection(formData.rosUrl)}
+                    onClick={() => handleTestConnection(formData.rosUrl, 'ROS Bridge')}
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded font-medium transition-colors whitespace-nowrap"
                   >
                     🧪 Test
@@ -151,7 +186,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                     placeholder="http://192.168.1.100:8080/?action=stream"
                   />
                   <button
-                    onClick={() => testConnection(formData.cameraUrl)}
+                    onClick={() => handleTestConnection(formData.cameraUrl, 'MJPEG Camera')}
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded font-medium transition-colors whitespace-nowrap"
                   >
                     🧪 Test

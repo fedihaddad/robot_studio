@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import RobotViewer from '../components/shared/RobotViewer';
+import EnhancedVisualization from '../components/3d-visualization/EnhancedVisualization';
 import ServoSlider from '../components/shared/ServoSlider';
 import { useServoControl } from '../hooks/useServoControl';
 import { useAppStore } from '../store/appStore';
 import { ServoCommand } from '../types';
-import { ROSService } from '../services/ros.service';
+import { ROSService, JOINT_NAME_TO_SERVO_ID } from '../services/ros.service';
 import { getServoConfig } from '../config/servoDegrees.config';
 
 interface Visualization3DPageProps {
@@ -21,11 +22,15 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
   rosService,
 }) => {
   const [activeTab, setActiveTab] = useState<'head' | 'arm'>('head');
+  const [useEnhancedVisualization, setUseEnhancedVisualization] = useState(true);
+  const [showCollisions, setShowCollisions] = useState(true);
+  const [showMarkers, setShowMarkers] = useState(true);
+  const [showTF, setShowTF] = useState(false);
   const { jointStates: offlineJointStates } = useAppStore();
 
   const {
     servoStates,
-    isConnected,
+    isConnected: servoHookConnected,
     lastUpdate,
     sendCommand,
     getHeadServoIds,
@@ -34,6 +39,7 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
     rosService,
     enabled: true,
   });
+  const isConnected = rosService?.isConnected() ?? servoHookConnected;
 
   const handleServoChange = (id: number, angle: number) => {
     const command: ServoCommand = { id, angle };
@@ -50,25 +56,64 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
   const armServoIds = getArmServoIds();
   const armServoIdsWithoutLeftWrist = armServoIds.filter((id) => id !== 16);
 
+  // Create reverse mapping: servo ID -> joint name
+  const SERVO_ID_TO_JOINT_NAME = useMemo(() => {
+    const reverse: Record<number, string> = {};
+    Object.entries(JOINT_NAME_TO_SERVO_ID).forEach(([jointName, servoId]) => {
+      reverse[servoId] = jointName;
+    });
+    return reverse;
+  }, []);
+
+  // Convert servo states (ID-based) to joint states (name-based)
+  const convertedServoStates = useMemo(() => {
+    const converted: Record<string, number> = {};
+    Object.entries(servoStates).forEach(([servoIdStr, state]) => {
+      const servoId = parseInt(servoIdStr, 10);
+      const jointName = SERVO_ID_TO_JOINT_NAME[servoId];
+      if (jointName && typeof state.angle === 'number') {
+        // Convert degrees to radians for URDF
+        converted[jointName] = (state.angle * Math.PI) / 180;
+      }
+    });
+    return converted;
+  }, [servoStates, SERVO_ID_TO_JOINT_NAME]);
+
   // Merge offline and ROS joint states
-  const mergedJointStates = {
-    ...jointStatesByName,
-    ...offlineJointStates, // Offline states override when in offline mode
-  };
+  const mergedJointStates = useMemo(() => {
+    const offlineOverrides = !isConnected ? offlineJointStates : {};
+
+    return {
+      ...convertedServoStates,
+      ...jointStatesByName,
+      ...offlineOverrides, // Only override with offline states when ROS is disconnected
+    };
+  }, [convertedServoStates, jointStatesByName, offlineJointStates, isConnected]);
 
   return (
     <div className="p-6 h-full flex flex-col gap-6">
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-4xl font-bold text-white mb-2">3D Robot Visualization</h1>
-          <p className="text-gray-400">Real-time visualization and control</p>
+          <p className="text-gray-400">Real-time visualization and control with MoveIt features</p>
         </div>
-        <div
-          className={`px-4 py-2 rounded-lg font-semibold ${
-            isConnected ? 'bg-green-900 text-green-300' : 'bg-orange-900 text-orange-300'
-          }`}
-        >
-          {isConnected ? '🟢 Connected' : '📺 Offline Mode'}
+        <div className="flex gap-2 items-center">
+          <div
+            className={`px-4 py-2 rounded-lg font-semibold ${
+              isConnected ? 'bg-green-900 text-green-300' : 'bg-orange-900 text-orange-300'
+            }`}
+          >
+            {isConnected ? '🟢 Connected to ROS' : '📺 Offline Mode'}
+          </div>
+          <label className="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded cursor-pointer hover:bg-gray-600">
+            <input
+              type="checkbox"
+              checked={useEnhancedVisualization}
+              onChange={(e) => setUseEnhancedVisualization(e.target.checked)}
+              className="rounded"
+            />
+            <span className="text-sm text-gray-200">Enhanced View</span>
+          </label>
         </div>
       </div>
 
@@ -82,17 +127,25 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
 
       <div className="flex-1 flex gap-6 overflow-hidden">
         <div className="flex-1 min-w-0 h-full">
-          <RobotViewer
-            joints={{
-              ...Object.fromEntries(
-                Object.entries(servoStates).map(([id, state]) => [id, state.angle])
-              ),
-              ...joints,
-            }}
-            jointStatesByName={mergedJointStates}
-            isConnected={isConnected}
-            onServoCommand={handleRobotViewerCommand}
-          />
+          {useEnhancedVisualization ? (
+            <EnhancedVisualization
+              joints={{}}
+              jointStatesByName={mergedJointStates}
+              isConnected={isConnected}
+              rosService={rosService}
+              showCollisions={showCollisions}
+              showMarkers={showMarkers}
+              showTF={showTF}
+              showTrajectoryControls={true}
+            />
+          ) : (
+            <RobotViewer
+              joints={{}}
+              jointStatesByName={mergedJointStates}
+              isConnected={isConnected}
+              onServoCommand={handleRobotViewerCommand}
+            />
+          )}
         </div>
 
         <div className="w-96 bg-gray-800 rounded-lg border border-gray-700 overflow-hidden flex flex-col">
@@ -102,6 +155,39 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
               <p>Last update: {new Date(lastUpdate).toLocaleTimeString()}</p>
               <p>Connected servos: {Object.keys(servoStates).length}</p>
             </div>
+
+            {useEnhancedVisualization && (
+              <div className="mt-4 border-t border-gray-700 pt-3 space-y-2">
+                <p className="text-xs font-semibold text-gray-300">Visualization Layers</p>
+                <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer hover:text-white">
+                  <input
+                    type="checkbox"
+                    checked={showCollisions}
+                    onChange={(e) => setShowCollisions(e.target.checked)}
+                    className="rounded"
+                  />
+                  Collision Meshes
+                </label>
+                <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer hover:text-white">
+                  <input
+                    type="checkbox"
+                    checked={showMarkers}
+                    onChange={(e) => setShowMarkers(e.target.checked)}
+                    className="rounded"
+                  />
+                  Scene Objects & Markers
+                </label>
+                <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer hover:text-white">
+                  <input
+                    type="checkbox"
+                    checked={showTF}
+                    onChange={(e) => setShowTF(e.target.checked)}
+                    className="rounded"
+                  />
+                  TF Frames (Advanced)
+                </label>
+              </div>
+            )}
           </div>
 
           <div className="flex gap-2 p-4 border-b border-gray-700 bg-gray-750">

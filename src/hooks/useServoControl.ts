@@ -27,9 +27,25 @@ export const useServoControl = (options: UseServoControlOptions = {}) => {
 
   const rosServiceRef = useRef(rosService);
 
+  useEffect(() => {
+    rosServiceRef.current = rosService ?? null;
+  }, [rosService]);
+
+  // Keep connection state synchronized even when the ROSService object identity does not change
+  useEffect(() => {
+    const updateConnectionState = () => {
+      const connected = !!rosServiceRef.current?.isConnected();
+      setIsConnected((prev) => (prev === connected ? prev : connected));
+    };
+
+    updateConnectionState();
+    const timer = window.setInterval(updateConnectionState, 500);
+    return () => window.clearInterval(timer);
+  }, []);
+
   // Subscribe to servo state updates from ROS2
   useEffect(() => {
-    if (!enabled || !rosServiceRef.current?.isConnected()) return;
+    if (!enabled || !isConnected || !rosServiceRef.current) return;
 
     const unsubscribe = rosServiceRef.current.subscribeToServoState((msg: any) => {
       if (msg.position && msg.name) {
@@ -62,9 +78,8 @@ export const useServoControl = (options: UseServoControlOptions = {}) => {
       }
     });
 
-    setIsConnected(true);
     return () => unsubscribe?.();
-  }, [enabled, rosServiceRef.current?.isConnected()]);
+  }, [enabled, isConnected, rosService]);
 
   /**
    * Send servo command via ROS2

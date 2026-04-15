@@ -58,7 +58,7 @@ class Configuration {
   private loadConfig(): AppConfig {
     return {
       ros: {
-        bridgeUrl: import.meta.env.VITE_ROS_BRIDGE_URL || 'ws://localhost:9090',
+        bridgeUrl: import.meta.env.VITE_ROS_BRIDGE_URL || 'ws://  :9090',
         topics: {
           servoCommand: import.meta.env.VITE_SERVO_COMMAND_TOPIC || '/servo/cmd',
           servoState: import.meta.env.VITE_SERVO_STATE_TOPIC || '/servo/state',
