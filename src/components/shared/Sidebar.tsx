@@ -21,6 +21,7 @@ const navItems: NavItem[] = [
   { id: 'manual_servo', label: 'Manual Control', icon: '🎮', page: 7 },
   { id: 'ros', label: 'ROS2 Monitor', icon: '📡', page: 4 },
   { id: 'settings', label: 'Settings', icon: '⚙️', page: 5 },
+  { id: 'modes', label: 'Control Modes', icon: '🎛️', page: 8 },
 ];
 
 const Sidebar: React.FC<SidebarProps> = ({ 
@@ -68,8 +69,6 @@ const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Footer */}
       <div className="p-4 border-t border-gray-800 text-xs text-gray-500">
-        <p>AXEL v1.0</p>
-        <p>Electron + React</p>
       </div>
     </div>
   );

@@ -24,9 +24,9 @@ export class STLLoader {
 
     const loadPromise = new Promise<THREE.BufferGeometry>((resolve, reject) => {
       console.log(`[STLLoader] Starting fetch: ${url}`);
-      fetch(url, { 
+      fetch(url, {
         headers: { 'Accept': '*/*' },
-        mode: 'cors' 
+        mode: 'cors'
       })
         .then((response) => {
           console.log(`[STLLoader] Response received for ${url}: status=${response.status} ok=${response.ok}`);
@@ -249,13 +249,13 @@ export class URDFBuilder {
       this.buildKinematicTree();
 
       this.log('✓ URDF scene built successfully');
-      
+
       // Diagnostic: log all registered joints
       console.log(`[URDFBuilder] ========== JOINTS DIAGNOSTIC ==========`);
       console.log(`[URDFBuilder] Total joints registered: ${this.jointObjects.size}`);
       console.log(`[URDFBuilder] Joint names:`, Array.from(this.jointObjects.keys()));
       console.log(`[URDFBuilder] ================================================`);
-      
+
       return this.scene;
     } catch (error) {
       this.log(`✗ Error building URDF scene: ${error}`);
@@ -268,7 +268,7 @@ export class URDFBuilder {
    */
   private async createLinkMeshes(): Promise<void> {
     const failedMeshes: { name: string; error: string }[] = [];
-    
+
     for (const link of this.urdf.links) {
       const linkGroup = new THREE.Group();
       linkGroup.name = link.name;
@@ -276,17 +276,17 @@ export class URDFBuilder {
       try {
         if (link.geometry?.type === 'mesh' && link.geometry.filename) {
           this.log(`Loading mesh: ${link.name} from ${link.geometry.filename}`);
-          
+
           const meshPath = this.resolveMeshPath(link.geometry.filename);
           console.log(`[URDFBuilder] Resolved mesh path for ${link.name}: ${meshPath}`);
           this.log(`Resolved path: ${meshPath}`);
-          
+
           const geometry = await STLLoader.load(meshPath);
-          
-          const material = new THREE.MeshPhongMaterial({
+
+          const material = new THREE.MeshStandardMaterial({
             color: 0xcccccc,
-            emissive: 0x1a1a1a,
-            shininess: 100,
+            metalness: 0.4,
+            roughness: 0.6,
             side: THREE.DoubleSide,
           });
 
@@ -314,7 +314,7 @@ export class URDFBuilder {
             dims.y || 0.1,
             dims.z || 0.1
           );
-          const material = new THREE.MeshPhongMaterial({ color: 0x888888 });
+          const material = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.5, roughness: 0.5 });
           const mesh = new THREE.Mesh(geometry, material);
           this.applyVisualOrigin(mesh, link);
           linkGroup.add(mesh);
@@ -327,14 +327,14 @@ export class URDFBuilder {
           );
           // URDF cylinders are along Z axis, Three.js cylinders are along Y axis.
           geometry.rotateX(Math.PI / 2);
-          const material = new THREE.MeshPhongMaterial({ color: 0x888888 });
+          const material = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.5, roughness: 0.5 });
           const mesh = new THREE.Mesh(geometry, material);
           this.applyVisualOrigin(mesh, link);
           linkGroup.add(mesh);
         } else if (link.geometry?.type === 'sphere') {
           const dims = link.geometry.dimensions || {};
           const geometry = new THREE.SphereGeometry(dims.radius || 0.1);
-          const material = new THREE.MeshPhongMaterial({ color: 0x888888 });
+          const material = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.5, roughness: 0.5 });
           const mesh = new THREE.Mesh(geometry, material);
           this.applyVisualOrigin(mesh, link);
           linkGroup.add(mesh);
@@ -348,7 +348,7 @@ export class URDFBuilder {
 
       this.linkMeshes.set(link.name, linkGroup);
     }
-    
+
     if (failedMeshes.length > 0) {
       console.warn(`[URDFBuilder] ${failedMeshes.length} meshes failed to load:`, failedMeshes);
     }
@@ -386,6 +386,7 @@ export class URDFBuilder {
     for (const joint of childJoints) {
       const jointGroup = new THREE.Group();
       jointGroup.name = joint.name;
+      jointGroup.userData = { isJoint: true, jointName: joint.name };
 
       // Store joint for later animation
       this.jointObjects.set(joint.name, jointGroup);
@@ -449,7 +450,7 @@ export class URDFBuilder {
 
   private resolvePublicAssetPath(relativePath: string): string {
     const normalized = relativePath.replace(/^\/+/, '');
-    
+
     // For Electron apps running in file:// protocol
     if (typeof window !== 'undefined' && window.location?.protocol === 'file:') {
       // Try to resolve relative to app root
@@ -462,7 +463,7 @@ export class URDFBuilder {
         return `${normalized}`;
       }
     }
-    
+
     // For web/dev environment
     return `/${normalized}`;
   }

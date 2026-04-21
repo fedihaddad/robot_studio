@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 
@@ -40,6 +40,11 @@ const createWindow = () => {
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.webContents.openDevTools();
   }
+
+  // Forward all console logs to terminal
+  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    console.log(`[Renderer] ${message} (${sourceId}:${line})`);
+  });
 };
 
 // This method will be called when Electron has finished
@@ -61,6 +66,16 @@ app.on('activate', () => {
   // dock icon is clicked and there are no other windows open.
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
+  }
+});
+
+// Forward renderer-side diagnostic logs to the terminal running Electron.
+ipcMain.on('terminal-log', (_event, payload: { message: string; data?: unknown }) => {
+  const timestamp = new Date().toISOString();
+  if (payload?.data !== undefined) {
+    console.log(`[${timestamp}] ${payload.message}`, payload.data);
+  } else {
+    console.log(`[${timestamp}] ${payload?.message ?? ''}`);
   }
 });
 

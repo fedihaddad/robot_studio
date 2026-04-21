@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Sidebar from './shared/Sidebar';
 import DashboardPage from '../pages/DashboardPage';
 import CameraPage from '../pages/CameraPage';
@@ -7,10 +7,12 @@ import ManualServoControlPage from '../pages/ManualServoControlPage';
 import Visualization3DPage from '../pages/Visualization3DPage';
 import RosMonitorPage from '../pages/RosMonitorPage';
 import SettingsPage from '../pages/SettingsPage';
+import ControlModePage from '../pages/ControlModePage';
 import Startup3DIntro from './shared/Startup3DIntro';
 import { useAppStore } from '../store/appStore';
-import { ServoCommand, ROS2Topic, ROSState } from '../types';
+import { ServoCommand, ROS2Topic, ROSState, RobotMode } from '../types';
 import { ROSService } from '../services/ros.service';
+import { ModeService } from '../services/modeService';
 
 const App: React.FC = () => {
   const { config, updateConfig, saveConfig, loadConfig } = useAppStore();
@@ -25,47 +27,95 @@ const App: React.FC = () => {
   });
   const [topics, setTopics] = useState<ROS2Topic[]>([]);
   const [isLoadingTopics, setIsLoadingTopics] = useState(false);
+  const [isReconnecting, setIsReconnecting] = useState(false);
   const [showStartupIntro, setShowStartupIntro] = useState<boolean>(false);
 
   const rosServiceRef = useRef<ROSService | null>(null);
+  const modeServiceRef = useRef<ModeService | null>(null);
 
-  // Initialize ROS connection
+  const connectROS = useCallback(async () => {
+    try {
+      setRosState(prev => ({
+        ...prev,
+        rosUrl: config.rosUrl,
+        error: null,
+      }));
+
+      if (rosServiceRef.current) {
+        rosServiceRef.current.disconnect();
+        rosServiceRef.current = null;
+      }
+
+      const service = new ROSService(config.rosUrl);
+      rosServiceRef.current = service;
+      await service.connect();
+
+      setRosState({
+        isConnected: true,
+        rosUrl: config.rosUrl,
+        error: null,
+      });
+
+      // Subscribe to joint states (servo IDs + full URDF joint names)
+      service.subscribeToJointStatesFull((servoJoints, namedJoints) => {
+        setJoints(servoJoints);
+        setJointStatesByName(namedJoints);
+      });
+
+      // Load topics
+      setIsLoadingTopics(true);
+      const topicList = await service.getTopics();
+      setTopics(topicList);
+      setIsLoadingTopics(false);
+    } catch (error) {
+      setRosState({
+        isConnected: false,
+        rosUrl: config.rosUrl,
+        error: error instanceof Error ? error.message : 'Connection failed',
+      });
+      setIsLoadingTopics(false);
+      throw error;
+    }
+  }, [config.rosUrl]);
+
+  const handleReconnectROS = useCallback(async () => {
+    if (isReconnecting) return;
+    setIsReconnecting(true);
+    try {
+      await connectROS();
+    } catch {
+      // Error already reflected in rosState.
+    } finally {
+      setIsReconnecting(false);
+    }
+  }, [connectROS, isReconnecting]);
+
+  // Initialize ROS connection once on app start.
   useEffect(() => {
-    const initROS = async () => {
-      try {
-        rosServiceRef.current = new ROSService(config.rosUrl);
-        await rosServiceRef.current.connect();
-        setRosState({
-          isConnected: true,
-          rosUrl: config.rosUrl,
-          error: null,
-        });
+    const timer = setTimeout(() => {
+      handleReconnectROS();
+    }, 1000);
 
-        // Subscribe to joint states (servo IDs + full URDF joint names)
-        rosServiceRef.current.subscribeToJointStatesFull((servoJoints, namedJoints) => {
-          setJoints(servoJoints);
-          setJointStatesByName(namedJoints);
-        });
-
-        // Load topics
-        setIsLoadingTopics(true);
-        const topicList = await rosServiceRef.current.getTopics();
-        setTopics(topicList);
-        setIsLoadingTopics(false);
-      } catch (error) {
-        setRosState(prev => ({
-          ...prev,
-          isConnected: false,
-          error: error instanceof Error ? error.message : 'Connection failed',
-        }));
-        setIsLoadingTopics(false);
+    return () => {
+      clearTimeout(timer);
+      if (rosServiceRef.current) {
+        rosServiceRef.current.disconnect();
+        rosServiceRef.current = null;
       }
     };
+    // Run only once on mount to avoid reconnect/disconnect loops.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    // Delay initialization to allow roslibjs to load
-    const timer = setTimeout(initROS, 1000);
-    return () => clearTimeout(timer);
-  }, [config.rosUrl]);
+  // Keep UI connection state synchronized with underlying ROS service status.
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const connected = !!rosServiceRef.current?.isConnected();
+      setRosState(prev => (prev.isConnected === connected ? prev : { ...prev, isConnected: connected }));
+    }, 500);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   const handleServoCommand = (command: ServoCommand) => {
     if (rosServiceRef.current?.isConnected()) {
@@ -76,6 +126,27 @@ const App: React.FC = () => {
   const handleEmergencyStop = (active: boolean) => {
     if (rosServiceRef.current?.isConnected()) {
       rosServiceRef.current.publishEmergencyStop(active);
+    }
+  };
+
+  const handleModeChange = async (mode: RobotMode): Promise<boolean> => {
+    try {
+      // Try to publish to robot if connected
+      if (rosServiceRef.current?.isConnected()) {
+        // Initialize mode service if needed
+        if (!modeServiceRef.current && rosServiceRef.current) {
+          modeServiceRef.current = new ModeService(rosServiceRef.current);
+        }
+
+        if (modeServiceRef.current) {
+          const success = await modeServiceRef.current.publishModeCommand(mode);
+          return success;
+        }
+      }
+      return false;
+    } catch (error) {
+      console.error('Error changing mode:', error);
+      return false;
     }
   };
 
@@ -96,6 +167,9 @@ const App: React.FC = () => {
             rosState={rosState}
             cameraConnected={cameraConnected}
             onEmergencyStop={handleEmergencyStop}
+            onReconnectROS={handleReconnectROS}
+            isReconnecting={isReconnecting}
+            onModeChange={handleModeChange}
           />
         );
       case 2:
@@ -114,6 +188,9 @@ const App: React.FC = () => {
             jointStatesByName={jointStatesByName}
             onServoCommand={handleServoCommand}
             rosService={rosServiceRef.current}
+            onReconnectROS={handleReconnectROS}
+            isReconnecting={isReconnecting}
+            onModeChange={handleModeChange}
           />
         );
       case 7:
@@ -127,6 +204,13 @@ const App: React.FC = () => {
             onConfigChange={updateConfig}
             onSave={saveConfig}
             onLoad={loadConfig}
+          />
+        );
+      case 8:
+        return (
+          <ControlModePage
+            onModeChange={handleModeChange}
+            isConnected={rosState.isConnected}
           />
         );
       default:
@@ -149,9 +233,8 @@ const App: React.FC = () => {
         <div className="h-12 bg-gray-800 border-b border-gray-700 px-6 flex items-center gap-6 text-sm">
           <div className="flex items-center gap-2">
             <span
-              className={`w-2 h-2 rounded-full ${
-                rosState.isConnected ? 'bg-green-500' : 'bg-red-500'
-              }`}
+              className={`w-2 h-2 rounded-full ${rosState.isConnected ? 'bg-green-500' : 'bg-red-500'
+                }`}
             />
             <span className="text-gray-400">ROS:</span>
             <span className={rosState.isConnected ? 'text-green-400' : 'text-red-400'}>
@@ -161,9 +244,8 @@ const App: React.FC = () => {
 
           <div className="flex items-center gap-2">
             <span
-              className={`w-2 h-2 rounded-full ${
-                cameraConnected ? 'bg-green-500' : 'bg-red-500'
-              }`}
+              className={`w-2 h-2 rounded-full ${cameraConnected ? 'bg-green-500' : 'bg-red-500'
+                }`}
             />
             <span className="text-gray-400">Camera:</span>
             <span className={cameraConnected ? 'text-green-400' : 'text-red-400'}>
@@ -172,7 +254,6 @@ const App: React.FC = () => {
           </div>
 
           <div className="ml-auto flex items-center gap-2">
-            <span className="text-gray-400">Robot:</span>
             <span className="text-blue-400 font-semibold">{config.robotName}</span>
           </div>
         </div>

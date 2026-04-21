@@ -6,6 +6,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { parseURDF } from '../../services/urdf.loader';
 import { URDFBuilder } from '../../services/urdf.builder';
 import { CollisionMeshLoader, CollisionGeometry } from '../../services/collision.loader';
@@ -26,6 +27,7 @@ export interface EnhancedVisualizationProps {
   showMarkers?: boolean;
   showTF?: boolean;
   showTrajectoryControls?: boolean;
+  onJointDrag?: (jointName: string, deltaAngle: number) => void;
 }
 
 /**
@@ -41,6 +43,7 @@ const EnhancedVisualization: React.FC<EnhancedVisualizationProps> = ({
   showMarkers = true,
   showTF = false,
   showTrajectoryControls = true,
+  onJointDrag,
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -119,37 +122,51 @@ const EnhancedVisualization: React.FC<EnhancedVisualizationProps> = ({
         mountRef.current!.appendChild(renderer.domElement);
         rendererRef.current = renderer;
 
-        // Lighting
-        const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+        // Lighting Enhancements
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
         scene.add(ambientLight);
 
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
-        directionalLight.position.set(1, 1, 1);
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444455, 0.8);
+        hemiLight.position.set(0, 2, 0);
+        scene.add(hemiLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        directionalLight.position.set(2, 3, 2);
         directionalLight.castShadow = true;
         directionalLight.shadow.mapSize.width = 2048;
         directionalLight.shadow.mapSize.height = 2048;
-        directionalLight.shadow.camera.left = -5;
-        directionalLight.shadow.camera.right = 5;
-        directionalLight.shadow.camera.top = 5;
-        directionalLight.shadow.camera.bottom = -5;
-        directionalLight.shadow.camera.far = 20;
+        directionalLight.shadow.bias = -0.0001;
         scene.add(directionalLight);
 
-        const pointLight = new THREE.PointLight(0xffffff, 0.6);
-        pointLight.position.set(-1, 0.5, 1);
-        scene.add(pointLight);
+        const backLight = new THREE.DirectionalLight(0xaaccff, 0.8);
+        backLight.position.set(-2, 2, -2);
+        scene.add(backLight);
 
-        // Ground
-        const groundGeometry = new THREE.PlaneGeometry(5, 5);
+        // Ground & Grid
+        const groundGeometry = new THREE.PlaneGeometry(10, 10);
         const groundMaterial = new THREE.MeshStandardMaterial({
-          color: 0x3a3a4e,
-          roughness: 0.8,
+          color: 0x222233,
+          roughness: 0.9,
+          metalness: 0.1,
+          side: THREE.DoubleSide
         });
         const ground = new THREE.Mesh(groundGeometry, groundMaterial);
         ground.rotation.x = -Math.PI / 2;
-        ground.position.y = -1;
+        ground.position.y = -0.01; // Slightly below 0 to prevent z-fighting with grid
         ground.receiveShadow = true;
         scene.add(ground);
+
+        const gridHelper = new THREE.GridHelper(10, 20, 0x555566, 0x333344);
+        scene.add(gridHelper);
+
+        // OrbitControls
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.target.set(0, 0.6, 0);
+        controls.maxDistance = 5;
+        controls.minDistance = 0.2;
+        controls.maxPolarAngle = Math.PI / 2 + 0.1; // Don't go too far below ground
 
         // Load URDF
         setLoadingMessage('Loading URDF...');
@@ -189,11 +206,13 @@ const EnhancedVisualization: React.FC<EnhancedVisualizationProps> = ({
           const distance = (maxDim / 2) / Math.tan(fov / 2) * 1.5;
 
           camera.position.set(
-            center.x + distance * 0.6,
-            center.y + distance * 0.3,
-            center.z + distance * 0.8
+            center.x + distance * 0.4,
+            center.y + distance * 0.2,
+            center.z + distance * 0.7
           );
-          camera.lookAt(center);
+          controls.target.copy(center);
+          controls.update();
+
           camera.near = Math.max(0.01, distance / 100);
           camera.far = distance * 100;
           camera.updateProjectionMatrix();
@@ -283,73 +302,75 @@ const EnhancedVisualization: React.FC<EnhancedVisualizationProps> = ({
         );
         cleanupFns.push(trajectoryPlayerUnsubscribe);
 
+        // Raycasting for interactive joint dragging
+        let draggedJoint: string | null = null;
+        let lastMouseY = 0;
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        const onPointerDown = (e: PointerEvent) => {
+          if (e.button !== 0) return; // Only left click
+
+          const rect = renderer.domElement.getBoundingClientRect();
+          mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+          mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+          raycaster.setFromCamera(mouse, camera);
+
+          const intersects = raycaster.intersectObjects(scene.children, true);
+          if (intersects.length > 0) {
+            let current: THREE.Object3D | null = intersects[0].object;
+            while (current) {
+              if (current.userData?.isJoint && current.userData?.jointName) {
+                draggedJoint = current.userData.jointName;
+                lastMouseY = e.clientY;
+                controls.enabled = false;
+                renderer.domElement.style.cursor = 'ns-resize';
+                e.stopPropagation(); // Stop orbit controls if we hit a joint
+                break;
+              }
+              current = current.parent;
+            }
+          }
+        };
+
+        const onPointerMove = (e: PointerEvent) => {
+          if (draggedJoint && onJointDrag) {
+            const deltaY = lastMouseY - e.clientY; // Up is positive
+            lastMouseY = e.clientY;
+            // Sensitivity: 1 pixel = 1 degree
+            onJointDrag(draggedJoint, deltaY * 1.0);
+          }
+        };
+
+        const onPointerUp = () => {
+          if (draggedJoint) {
+            draggedJoint = null;
+            controls.enabled = true;
+            renderer.domElement.style.cursor = 'grab';
+          }
+        };
+
+        renderer.domElement.addEventListener('pointerdown', onPointerDown);
+        renderer.domElement.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp);
+
+        cleanupFns.push(() => {
+          renderer.domElement.removeEventListener('pointerdown', onPointerDown);
+          renderer.domElement.removeEventListener('pointermove', onPointerMove);
+          window.removeEventListener('pointerup', onPointerUp);
+        });
+
+
         // Animation loop
         const animate = () => {
           animationFrameId = requestAnimationFrame(animate);
+          controls.update(); // required if controls.enableDamping or controls.autoRotate are set
           renderer.render(scene, camera);
         };
         animate();
 
-        // Mouse controls for camera rotation and zoom
-        let isDragging = false;
-        let previousMousePosition = { x: 0, y: 0 };
-        const orbitTarget = new THREE.Vector3(0, 0.5, 0);
-
-        const onMouseDown = (e: MouseEvent) => {
-          isDragging = true;
-          previousMousePosition = { x: e.clientX, y: e.clientY };
-        };
-
-        const onMouseMove = (e: MouseEvent) => {
-          if (!isDragging) return;
-
-          const deltaX = e.clientX - previousMousePosition.x;
-          const deltaY = e.clientY - previousMousePosition.y;
-          const offset = camera.position.clone().sub(orbitTarget);
-
-          // Rotate camera around robot
-          const phi = Math.atan2(offset.z, offset.x);
-          const theta = Math.acos(Math.max(-1, Math.min(1, offset.y / offset.length())));
-          const radius = offset.length();
-
-          const newPhi = phi + deltaX * 0.01;
-          const newTheta = Math.max(0.1, Math.min(Math.PI - 0.1, theta + deltaY * 0.01));
-
-          camera.position.x = orbitTarget.x + radius * Math.sin(newTheta) * Math.cos(newPhi);
-          camera.position.y = orbitTarget.y + radius * Math.cos(newTheta);
-          camera.position.z = orbitTarget.z + radius * Math.sin(newTheta) * Math.sin(newPhi);
-          camera.lookAt(orbitTarget);
-
-          previousMousePosition = { x: e.clientX, y: e.clientY };
-        };
-
-        const onMouseUp = () => {
-          isDragging = false;
-        };
-
-        const onWheel = (e: WheelEvent) => {
-          e.preventDefault();
-          const offset = camera.position.clone().sub(orbitTarget);
-          const direction = offset.clone().normalize();
-          const currentDist = offset.length();
-          const newDist = Math.max(0.1, Math.min(5, currentDist + e.deltaY * 0.0005));
-
-          camera.position.copy(orbitTarget.clone().add(direction.multiplyScalar(newDist)));
-          camera.lookAt(orbitTarget);
-        };
-
-        renderer.domElement.addEventListener('mousedown', onMouseDown);
-        renderer.domElement.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
-        renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
-        renderer.domElement.style.cursor = 'grab';
-
-        cleanupFns.push(() => {
-          renderer.domElement.removeEventListener('mousedown', onMouseDown);
-          renderer.domElement.removeEventListener('mousemove', onMouseMove);
-          document.removeEventListener('mouseup', onMouseUp);
-          renderer.domElement.removeEventListener('wheel', onWheel);
-        });
+        // OrbitControls handles mouse interactions now
 
         setIsLoading(false);
       } catch (err) {

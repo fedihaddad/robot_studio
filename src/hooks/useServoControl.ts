@@ -64,10 +64,12 @@ export const useServoControl = (options: UseServoControlOptions = {}) => {
                 })();
 
           if (servoId === -1) return;
+          const angleRadians = msg.position[index];
+          if (!Number.isFinite(angleRadians)) return;
 
           newStates[servoId] = {
             id: servoId,
-            angle: (msg.position[index] * 180) / Math.PI, // Convert from radians
+            angle: (angleRadians * 180) / Math.PI, // Convert from radians
             velocity: msg.velocity?.[index] || 0,
             effort: msg.effort?.[index] || 0,
           };
@@ -86,11 +88,19 @@ export const useServoControl = (options: UseServoControlOptions = {}) => {
    */
   const sendCommand = useCallback(
     (servo: ServoCommand) => {
-      if (!rosServiceRef.current?.isConnected()) {
-        console.warn('ROS not connected');
+      const connected = rosServiceRef.current?.isConnected();
+      
+      if (!connected) {
+        console.warn('[ServoControl] Cannot send command: ROS not connected', servo);
         return;
       }
-      rosServiceRef.current.publishServoCommand(servo);
+      
+      try {
+        rosServiceRef.current.publishServoCommand(servo);
+        console.log('[ServoControl] Sent servo command:', servo);
+      } catch (error) {
+        console.error('[ServoControl] Error sending servo command:', error, servo);
+      }
     },
     []
   );
@@ -106,19 +116,17 @@ export const useServoControl = (options: UseServoControlOptions = {}) => {
   );
 
   /**
-   * Get head servo IDs (1-15)
+   * Get head servo IDs (1-17)
    */
   const getHeadServoIds = (): number[] => {
-    // 0..16 + eye/iris visual chain 53..56
-    return [...Array.from({ length: 17 }, (_, i) => i), 53, 54, 55, 56];
+    return Array.from({ length: 17 }, (_, i) => i + 1); // 1..17
   };
 
   /**
-   * Get arm servo IDs (16-25)
+   * Get arm & torso servo IDs (18-39)
    */
   const getArmServoIds = (): number[] => {
-    // Arms + fingers + waist
-    return Array.from({ length: 36 }, (_, i) => 17 + i); // 17..52
+    return Array.from({ length: 22 }, (_, i) => 18 + i); // 18..39
   };
 
   /**

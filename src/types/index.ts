@@ -60,6 +60,25 @@ export interface ServoPreset {
   positions: Map<number, number>; // servo_id -> angle
 }
 
+// Robot Mode Types
+export type RobotMode = 'GENERAL' | 'SECURITY' | 'SOCIAL' | 'MANUAL';
+
+export interface RobotModeCapabilities {
+  mode: RobotMode;
+  label: string;
+  description: string;
+  icon: string;
+  color: string;
+  bgColor: string;
+  borderColor: string;
+  allowedTools: string[];
+  allowPhysicalActions: boolean;
+  allowWebSearch: boolean;
+  allowVisionAnalysis: boolean;
+  safetyLevel: 'low' | 'medium' | 'high';
+  systemPrompt?: string;
+}
+
 // Time Synchronization Types
 export interface TimeSyncState {
   dashboardTime: number;

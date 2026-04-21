@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { parseURDF } from '../../services/urdf.loader';
 import { URDFBuilder } from '../../services/urdf.builder';
@@ -56,13 +56,13 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
   const latestNamedJointsRef = useRef<Record<string, number>>({});
   const handHandlesRef = useRef<{ left?: THREE.Mesh; right?: THREE.Mesh }>({});
   const isDraggingHandleRef = useRef(false);
-  
+
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loadingMessage, setLoadingMessage] = useState('Initializing...');
   const [debugMode, setDebugMode] = useState(false);
   const [debugStats, setDebugStats] = useState('');
-  
+
   const { config } = useAppStore();
 
   useEffect(() => {
@@ -193,7 +193,7 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
           setLoadingMessage('Loading local URDF (offline mode)...');
           urdfString = await loadLocalURDF();
         }
-        
+
         setLoadingMessage('Parsing URDF...');
         console.log('[RobotViewer] Parsing URDF...');
         const urdf = parseURDF(urdfString);
@@ -211,16 +211,16 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
         const robotScene = await builder.build();
         console.log('[RobotViewer] ✅ Robot scene built successfully');
         console.log('[RobotViewer] Robot scene children count:', robotScene.children.length);
-        
+
         robotGroupRef.current = robotScene;
-        
+
         // Fix z-up to y-up for InMoov (rotate 90 degrees around X axis)
         robotScene.rotation.x = -Math.PI / 2;
         robotScene.position.y = 0.3; // Lift robot up
-        
+
         scene.add(robotScene);
         urdfBuilderRef.current = builder;
-        
+
         console.log('[RobotViewer] Robot added to scene at position:', robotScene.position);
         fitCameraToRobot(camera, robotScene, orbitTargetRef.current, 1.5);
         createOrUpdateHandHandles(scene, robotScene, handHandlesRef.current);
@@ -349,7 +349,7 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
 
       msg.name.forEach((jointName: string, index: number) => {
         const angleRadians = msg.position[index];
-        if (typeof angleRadians === 'number') {
+        if (Number.isFinite(angleRadians)) {
           urdfBuilderRef.current?.updateJoint(jointName, angleRadians);
         }
       });
@@ -526,7 +526,7 @@ function setupControls(
     const newDist = Math.max(0.1, Math.min(3, currentDist + e.deltaY * 0.0002));
 
     console.log('[RobotViewer] Zoom: current distance:', currentDist.toFixed(2), '-> new:', newDist.toFixed(2));
-    
+
     camera.position.copy(target.clone().add(direction.multiplyScalar(newDist)));
     camera.lookAt(target);
   };
@@ -535,7 +535,7 @@ function setupControls(
   domElement.addEventListener('mousemove', onMouseMove);
   domElement.addEventListener('mouseup', onMouseUp);
   domElement.addEventListener('wheel', onWheel, { passive: false });
-  
+
   console.log('[RobotViewer setupControls] Wheel listener added with passive: false');
   domElement.addEventListener('mouseup', onMouseUp);
   domElement.addEventListener('wheel', onWheel, { passive: false });

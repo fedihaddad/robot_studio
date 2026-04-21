@@ -9,6 +9,9 @@ import { timeSyncService } from './timeSynchronization.service';
 declare global {
   interface Window {
     ROSLIB: any;
+    terminalLogger?: {
+      log: (message: string, data?: unknown) => void;
+    };
   }
 }
 
@@ -24,6 +27,9 @@ export class ROSService {
   private publishers: Map<string, any> = new Map();
   private topicCache: Map<string, any> = new Map();
   private isConnectedFlag = false;
+  private lastJointPositions: Map<string, number> = new Map();
+  private readonly jointDeltaThreshold = 1e-4; // radians
+  private readonly dashboardTrajectoryTopic = '/joint_trajectory_controller/joint_trajectory';
 
   constructor(rosUrl: string) {
     if (!window.ROSLIB) {
@@ -58,6 +64,7 @@ export class ROSService {
     this.subscribers.clear();
     this.publishers.forEach(pub => pub.unsubscribe());
     this.topicCache.clear();
+    this.lastJointPositions.clear();
     if (this.ros) {
       this.ros.close();
     }
@@ -81,13 +88,68 @@ export class ROSService {
 
     subscriber.subscribe((msg: any) => {
       this.topicCache.set(topic, { message: msg, timestamp: Date.now() });
-      callbacks.forEach((cb) => cb(msg));
+      if (topic === '/joint_states') {
+        this.logJointStateDelta(msg);
+      }
+      callbacks.forEach((cb) => {
+        try {
+          cb(msg);
+        } catch (error) {
+          console.error(`[ROSService] Callback error on topic ${topic}:`, error);
+        }
+      });
     });
 
     this.subscribers.set(topic, {
       topic: subscriber,
       callbacks,
     });
+  }
+
+  private logJointStateDelta(msg: any): void {
+    if (!msg?.name || !msg?.position || !Array.isArray(msg.name) || !Array.isArray(msg.position)) {
+      window.terminalLogger?.log('[ROS RX] /joint_states (invalid payload)', msg);
+      return;
+    }
+
+    const deltas: Array<{
+      joint: string;
+      previous: number | null;
+      current: number;
+      delta: number;
+    }> = [];
+
+    msg.name.forEach((jointName: string, index: number) => {
+      const current = msg.position[index];
+      if (!Number.isFinite(current)) return;
+
+      const previous = this.lastJointPositions.get(jointName);
+      this.lastJointPositions.set(jointName, current);
+
+      if (previous === undefined) {
+        deltas.push({
+          joint: jointName,
+          previous: null,
+          current,
+          delta: 0,
+        });
+        return;
+      }
+
+      const delta = current - previous;
+      if (Math.abs(delta) >= this.jointDeltaThreshold) {
+        deltas.push({
+          joint: jointName,
+          previous,
+          current,
+          delta,
+        });
+      }
+    });
+
+    if (deltas.length > 0) {
+      window.terminalLogger?.log(`[ROS RX][DELTA] /joint_states changed (${deltas.length})`, deltas);
+    }
   }
 
   unsubscribe(topic: string, callback?: (msg: any) => void): void {
@@ -109,17 +171,35 @@ export class ROSService {
   }
 
   publish(topic: string, messageType: string, message: any): void {
-    if (!this.publishers.has(topic)) {
-      const publisher = new window.ROSLIB.Topic({
-        ros: this.ros,
-        name: topic,
-        messageType: messageType,
-      });
-      this.publishers.set(topic, publisher);
+    // Check if ROS is connected
+    if (!this.isConnectedFlag) {
+      console.warn(`[ROS] Cannot publish to ${topic}: ROS not connected`);
+      return;
     }
 
-    const publisher = this.publishers.get(topic);
-    publisher.publish(message);
+    if (!this.publishers.has(topic)) {
+      try {
+        const publisher = new window.ROSLIB.Topic({
+          ros: this.ros,
+          name: topic,
+          messageType: messageType,
+        });
+        this.publishers.set(topic, publisher);
+      } catch (error) {
+        console.error(`[ROS] Failed to create publisher for ${topic}:`, error);
+        return;
+      }
+    }
+
+    try {
+      const publisher = this.publishers.get(topic);
+      if (publisher) {
+        publisher.publish(message);
+        window.terminalLogger?.log(`[ROS TX] Published to ${topic}`, message);
+      }
+    } catch (error) {
+      console.error(`[ROS] Failed to publish to ${topic}:`, error);
+    }
   }
 
   // Servo-specific methods
@@ -129,6 +209,78 @@ export class ROSService {
       'std_msgs/Float64MultiArray',
       {
         data: [servo.id, servo.angle],
+      }
+    );
+
+    // Also bridge dashboard commands to ROS trajectory controller so motion is visible in ROS.
+    this.publishServoAsJointTrajectory(servo);
+  }
+
+  private publishServoAsJointTrajectory(servo: ServoCommand): void {
+    const jointName = SERVO_ID_TO_JOINT_NAME[servo.id];
+    if (!jointName) {
+      return;
+    }
+
+    const targetRadians = (servo.angle * Math.PI) / 180;
+    const latestJointState = this.getLatestServoState();
+
+    // Preferred: publish full joint vector based on latest /joint_states so controllers
+    // that require complete joint goals can accept the command.
+    if (
+      latestJointState?.name &&
+      latestJointState?.position &&
+      Array.isArray(latestJointState.name) &&
+      Array.isArray(latestJointState.position) &&
+      latestJointState.name.length === latestJointState.position.length
+    ) {
+      const jointNames: string[] = [...latestJointState.name];
+      const positions: number[] = [...latestJointState.position];
+      const targetIndex = jointNames.indexOf(jointName);
+
+      if (targetIndex !== -1) {
+        positions[targetIndex] = targetRadians;
+        this.publishJointTrajectory(jointNames, positions, 0.25);
+        window.terminalLogger?.log('[ROS TX] dashboard trajectory (full-state)', {
+          joint: jointName,
+          targetRadians,
+          topic: this.dashboardTrajectoryTopic,
+        });
+        return;
+      }
+    }
+
+    // Fallback: publish a single-joint trajectory.
+    this.publishJointTrajectory([jointName], [targetRadians], 0.25);
+    window.terminalLogger?.log('[ROS TX] dashboard trajectory (single-joint)', {
+      joint: jointName,
+      targetRadians,
+      topic: this.dashboardTrajectoryTopic,
+    });
+  }
+
+  private publishJointTrajectory(
+    jointNames: string[],
+    positions: number[],
+    durationSeconds = 0.25
+  ): void {
+    const sec = Math.max(0, Math.floor(durationSeconds));
+    const nanosec = Math.max(0, Math.floor((durationSeconds - sec) * 1e9));
+
+    this.publish(
+      this.dashboardTrajectoryTopic,
+      'trajectory_msgs/JointTrajectory',
+      {
+        joint_names: jointNames,
+        points: [
+          {
+            positions,
+            time_from_start: {
+              sec,
+              nanosec,
+            },
+          },
+        ],
       }
     );
   }
@@ -199,6 +351,7 @@ export class ROSService {
       if (msg.name && msg.position) {
         msg.name.forEach((jointName: string, index: number) => {
           const angleRadians = msg.position[index];
+          if (!Number.isFinite(angleRadians)) return;
           jointStatesByName[jointName] = angleRadians;
 
           const angleDegrees = (angleRadians * 180) / Math.PI;
@@ -618,6 +771,13 @@ export const JOINT_NAME_TO_SERVO_ID: Record<string, number> = {
   l_iris_joint: 55,
   r_iris_joint: 56,
 };
+
+export const SERVO_ID_TO_JOINT_NAME: Record<number, string> = Object.entries(
+  JOINT_NAME_TO_SERVO_ID
+).reduce((acc, [joint, servoId]) => {
+  acc[servoId] = joint;
+  return acc;
+}, {} as Record<number, string>);
 
 function mapJointNameToServoId(jointName: string): number {
   return JOINT_NAME_TO_SERVO_ID[jointName] ?? -1;
