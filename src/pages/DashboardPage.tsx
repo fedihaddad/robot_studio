@@ -36,13 +36,13 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
   }, [rosState.isConnected]);
 
   return (
-    <div className="p-6 space-y-6 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 min-h-screen">
+    <div className="p-6 space-y-6 min-h-screen" style={{ background: 'var(--axel-bg)' }}>
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-5xl font-bold bg-gradient-to-r from-blue-400 via-cyan-400 to-blue-500 bg-clip-text text-transparent mb-2">
-          🤖 AXEL Dashboard
+        <h1 className="text-4xl axel-title axel-gradient-text mb-2">
+          AXEL Dashboard
         </h1>
-        <p className="text-gray-400 text-lg">Real-time monitoring and intelligent control</p>
+        <p className="axel-muted text-base">Real-time monitoring and intelligent control</p>
       </div>
 
       {/* Top Status Cards */}
@@ -50,16 +50,16 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
         {/* ROS Connection */}
         <div className={`relative overflow-hidden rounded-xl border ${
           rosState.isConnected 
-            ? 'bg-gradient-to-br from-green-900/30 to-emerald-900/30 border-green-700/50' 
-            : 'bg-gradient-to-br from-red-900/30 to-rose-900/30 border-red-700/50'
-        } p-6 backdrop-blur-sm transition-all duration-300 hover:shadow-lg hover:shadow-${rosState.isConnected ? 'green' : 'red'}-500/20`}>
+            ? 'bg-emerald-900/10 border-emerald-500/35' 
+            : 'bg-rose-900/10 border-rose-500/35'
+        } p-6 transition-all duration-300`}>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-400 text-sm font-medium">📡 ROS Connection</p>
+              <p className="axel-muted text-sm font-medium">ROS Connection</p>
               <p className={`text-2xl font-bold mt-2 ${rosState.isConnected ? 'text-green-400' : 'text-red-400'}`}>
                 {rosState.isConnected ? 'Connected' : 'Disconnected'}
               </p>
-              <p className="text-xs text-gray-500 mt-1">{rosState.rosUrl}</p>
+              <p className="text-xs axel-muted mt-1">{rosState.rosUrl}</p>
             </div>
             <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
               rosState.isConnected 
@@ -74,16 +74,16 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
         {/* Camera Feed */}
         <div className={`relative overflow-hidden rounded-xl border ${
           cameraConnected 
-            ? 'bg-gradient-to-br from-blue-900/30 to-cyan-900/30 border-blue-700/50' 
-            : 'bg-gradient-to-br from-gray-700/30 to-gray-800/30 border-gray-700/50'
-        } p-6 backdrop-blur-sm transition-all duration-300 hover:shadow-lg`}>
+            ? 'bg-cyan-900/10 border-cyan-500/35' 
+            : 'bg-slate-800/40 border-slate-600/60'
+        } p-6 transition-all duration-300`}>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-400 text-sm font-medium">📷 Camera Feed</p>
+              <p className="axel-muted text-sm font-medium">Camera Feed</p>
               <p className={`text-2xl font-bold mt-2 ${cameraConnected ? 'text-blue-400' : 'text-gray-400'}`}>
                 {cameraConnected ? 'Online' : 'Offline'}
               </p>
-              <p className="text-xs text-gray-500 mt-1">{cameraConnected ? 'Stream active' : 'No feed'}</p>
+              <p className="text-xs axel-muted mt-1">{cameraConnected ? 'Stream active' : 'No feed'}</p>
             </div>
             <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
               cameraConnected 
@@ -98,7 +98,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
       {/* Recovery Alert */}
       {!rosState.isConnected && (
-        <div className="bg-gradient-to-r from-red-900/40 to-rose-900/40 border border-red-700/50 rounded-xl p-6 backdrop-blur-sm">
+        <div className="bg-rose-900/15 border border-rose-500/35 rounded-xl p-6">
           <div className="flex items-center gap-4">
             <div className="text-3xl">⚠️</div>
             <div className="flex-1">
@@ -112,8 +112,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
               disabled={isReconnecting}
               className={`px-6 py-2 rounded-lg font-semibold transition-all whitespace-nowrap ${
                 isReconnecting
-                  ? 'bg-gray-600 text-gray-300 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white shadow-lg hover:shadow-cyan-500/50'
+                  ? 'bg-slate-600 text-slate-300 cursor-not-allowed'
+                  : 'axel-button-primary text-white'
               }`}
             >
               {isReconnecting ? '🔄 Reconnecting...' : '🔗 Reconnect ROS'}
@@ -128,7 +128,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
       {/* System Health */}
       <div className="grid grid-cols-2 gap-6">
         {/* Power Status */}
-        <div className="bg-gradient-to-br from-gray-800/50 to-gray-900/50 border border-gray-700/50 rounded-xl p-6 backdrop-blur-sm">
+        <div className="axel-card p-6">
           <h3 className="text-lg font-bold text-white mb-4">⚡ Power Supply</h3>
           
           <div className="space-y-4">
@@ -152,7 +152,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
         </div>
 
         {/* System Status */}
-        <div className="bg-gradient-to-br from-gray-800/50 to-gray-900/50 border border-gray-700/50 rounded-xl p-6 backdrop-blur-sm">
+        <div className="axel-card p-6">
           <h3 className="text-lg font-bold text-white mb-4">🔧 System Status</h3>
           
           <div className="space-y-3">
@@ -181,7 +181,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
       </div>
 
       {/* Safety Control */}
-      <div className="bg-gradient-to-br from-red-900/20 to-rose-900/20 border border-red-700/50 rounded-xl p-6 backdrop-blur-sm">
+      <div className="bg-rose-900/10 border border-rose-500/35 rounded-xl p-6">
         <div className="flex items-center justify-between gap-6">
           <div>
             <h3 className="text-lg font-bold text-white mb-1">🛑 Emergency Stop</h3>
@@ -203,28 +203,28 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
       {/* Servo Statistics */}
       <div className="grid grid-cols-3 gap-4">
-        <div className="bg-gradient-to-br from-blue-900/30 to-cyan-900/30 border border-blue-700/50 rounded-xl p-6 backdrop-blur-sm text-center hover:shadow-lg hover:shadow-blue-500/20 transition-all">
-          <div className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent mb-2">
+        <div className="axel-card p-6 text-center transition-all">
+          <div className="text-4xl font-bold axel-gradient-text mb-2">
             15
           </div>
-          <p className="text-gray-400 text-sm font-medium">Head Servos</p>
-          <p className="text-xs text-gray-500 mt-1">Motors</p>
+          <p className="axel-muted text-sm font-medium">Head Servos</p>
+          <p className="text-xs axel-muted mt-1">Motors</p>
         </div>
 
-        <div className="bg-gradient-to-br from-purple-900/30 to-pink-900/30 border border-purple-700/50 rounded-xl p-6 backdrop-blur-sm text-center hover:shadow-lg hover:shadow-purple-500/20 transition-all">
-          <div className="text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent mb-2">
+        <div className="axel-card p-6 text-center transition-all">
+          <div className="text-4xl font-bold axel-gradient-text mb-2">
             10
           </div>
-          <p className="text-gray-400 text-sm font-medium">Arm Servos</p>
-          <p className="text-xs text-gray-500 mt-1">Motors</p>
+          <p className="axel-muted text-sm font-medium">Arm Servos</p>
+          <p className="text-xs axel-muted mt-1">Motors</p>
         </div>
 
-        <div className="bg-gradient-to-br from-green-900/30 to-emerald-900/30 border border-green-700/50 rounded-xl p-6 backdrop-blur-sm text-center hover:shadow-lg hover:shadow-green-500/20 transition-all">
-          <div className="text-4xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent mb-2">
+        <div className="axel-card p-6 text-center transition-all">
+          <div className="text-4xl font-bold axel-gradient-text mb-2">
             25
           </div>
-          <p className="text-gray-400 text-sm font-medium">Total Servos</p>
-          <p className="text-xs text-gray-500 mt-1">Active</p>
+          <p className="axel-muted text-sm font-medium">Total Servos</p>
+          <p className="text-xs axel-muted mt-1">Active</p>
         </div>
       </div>
     </div>

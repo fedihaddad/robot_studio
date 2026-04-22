@@ -7,7 +7,6 @@ import { getServoConfig } from '../config/servoDegrees.config';
 
 interface ManualServoControlPageProps {
   joints?: Record<number, number>;
-  onServoCommand?: (command: ServoCommand) => void;
   rosService: ROSService | null;
 }
 
@@ -83,7 +82,6 @@ const servoGroups: ServoGroup[] = [
 
 const ManualServoControlPage: React.FC<ManualServoControlPageProps> = ({
   joints = {},
-  onServoCommand,
   rosService,
 }) => {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
@@ -103,7 +101,6 @@ const ManualServoControlPage: React.FC<ManualServoControlPageProps> = ({
   const handleServoChange = (servoId: number, angle: number) => {
     const command: ServoCommand = { id: servoId, angle };
     sendCommand(command);
-    onServoCommand?.(command);
   };
 
   const toggleGroup = (groupName: string) => {

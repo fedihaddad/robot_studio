@@ -5,6 +5,7 @@ import { URDFBuilder } from '../../services/urdf.builder';
 import { JOINT_NAME_TO_SERVO_ID, ROSService } from '../../services/ros.service';
 import { useAppStore } from '../../store/appStore';
 import { ServoCommand } from '../../types';
+import { ModelService } from '../../services/model.service';
 
 interface RobotViewerProps {
   joints: Record<number, number>;
@@ -16,6 +17,7 @@ interface RobotViewerProps {
   showLoadingOverlay?: boolean;
   showLoadingDetails?: boolean;
   showControlsHint?: boolean;
+  isIntroMode?: boolean;
   onModelReady?: () => void;
   onServoCommand?: (command: ServoCommand) => void;
 }
@@ -38,6 +40,7 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
   showLoadingOverlay = true,
   showLoadingDetails = true,
   showControlsHint = true,
+  isIntroMode = false,
   onModelReady,
   onServoCommand,
 }) => {
@@ -115,10 +118,10 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
         // Renderer setup
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(mountRef.current!.clientWidth, mountRef.current!.clientHeight);
-        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.enabled = !isIntroMode;
         renderer.shadowMap.type = THREE.PCFShadowMap;
         renderer.outputColorSpace = THREE.SRGBColorSpace;
-        renderer.pixelRatio = Math.min(window.devicePixelRatio, 2);
+        renderer.pixelRatio = isIntroMode ? 1 : Math.min(window.devicePixelRatio, 2);
         mountRef.current!.appendChild(renderer.domElement);
         rendererRef.current = renderer;
 
@@ -128,14 +131,16 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
 
         const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
         directionalLight.position.set(1, 1, 1);
-        directionalLight.castShadow = true;
-        directionalLight.shadow.mapSize.width = 2048;
-        directionalLight.shadow.mapSize.height = 2048;
-        directionalLight.shadow.camera.left = -5;
-        directionalLight.shadow.camera.right = 5;
-        directionalLight.shadow.camera.top = 5;
-        directionalLight.shadow.camera.bottom = -5;
-        directionalLight.shadow.camera.far = 20;
+        directionalLight.castShadow = !isIntroMode;
+        if (!isIntroMode) {
+          directionalLight.shadow.mapSize.width = 2048;
+          directionalLight.shadow.mapSize.height = 2048;
+          directionalLight.shadow.camera.left = -5;
+          directionalLight.shadow.camera.right = 5;
+          directionalLight.shadow.camera.top = 5;
+          directionalLight.shadow.camera.bottom = -5;
+          directionalLight.shadow.camera.far = 20;
+        }
         scene.add(directionalLight);
 
         // Point light for fill
@@ -155,70 +160,74 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
         ground.receiveShadow = true;
         scene.add(ground);
 
-        // Load URDF
-        let urdfString: string;
-        const loadLocalURDF = async (): Promise<string> => {
-          if (cachedLocalURDF) {
-            return cachedLocalURDF;
-          }
-          setLoadingMessage('Loading local URDF...');
-          let response = await fetch(LOCAL_URDF_URL);
-          if (!response.ok) {
-            // Dev fallback for public/data path.
-            response = await fetch('/data/inmoov-local.urdf');
-          }
-          if (!response.ok) throw new Error(`Failed to load URDF: ${response.status}`);
-          cachedLocalURDF = await response.text();
-          return cachedLocalURDF;
-        };
+        // Load URDF & Build scene
+        const modelService = ModelService.getInstance();
+        let robotScene: THREE.Group;
+        let builder: URDFBuilder;
 
-        if (isConnected && rosServiceRef.current) {
-          setLoadingMessage('Loading URDF from ROS2 /robot_description topic...');
-          console.log('[RobotViewer] Attempting to load URDF from ROS2...');
-          try {
-            urdfString = await rosServiceRef.current.loadURDF();
-            console.log('[RobotViewer] ✅ URDF loaded from ROS2 (length:', urdfString.length, 'bytes)');
-            if (urdfString.length < 100) {
-              console.warn('[RobotViewer] ⚠️ URDF seems too short, may be corrupt');
-            }
-          } catch (rosError) {
-            console.warn('[RobotViewer] ❌ Failed to load URDF from ROS2:', rosError);
-            console.log('[RobotViewer] Falling back to local URDF...');
-            setLoadingMessage('ROS2 URDF failed, loading local fallback...');
-            urdfString = await loadLocalURDF();
-            console.log('[RobotViewer] ✅ Local URDF loaded (length:', urdfString.length, 'bytes)');
-          }
+        if (modelService.isModelReady()) {
+          setLoadingMessage('Using preloaded model...');
+          builder = modelService.getBuilder()!;
+          robotScene = modelService.getRobotScene()!;
+          scene.add(robotScene);
         } else {
-          console.log('[RobotViewer] Not connected to ROS2, loading local URDF...');
-          setLoadingMessage('Loading local URDF (offline mode)...');
-          urdfString = await loadLocalURDF();
+          setLoadingMessage('Loading URDF...');
+          let urdfString: string;
+          const loadLocalURDF = async (): Promise<string> => {
+            if (cachedLocalURDF) {
+              return cachedLocalURDF;
+            }
+            setLoadingMessage('Loading local URDF...');
+            const urdfCandidates = [
+              LOCAL_URDF_URL,
+              new URL('../data/inmoov-local.urdf', window.location.href).toString(),
+              new URL('./data/inmoov-local.urdf', window.location.href).toString(),
+              '/data/inmoov-local.urdf',
+            ];
+
+            for (const candidate of urdfCandidates) {
+              try {
+                const response = await fetch(candidate);
+                if (!response.ok) continue;
+                cachedLocalURDF = await response.text();
+                return cachedLocalURDF;
+              } catch {
+                // Try the next candidate.
+              }
+            }
+
+            throw new Error('Failed to load local URDF from packaged paths');
+          };
+
+          if (isConnected && rosServiceRef.current) {
+            setLoadingMessage('Loading URDF from ROS2 /robot_description topic...');
+            try {
+              urdfString = await rosServiceRef.current.loadURDF();
+            } catch (rosError) {
+              setLoadingMessage('ROS2 URDF failed, loading local fallback...');
+              urdfString = await loadLocalURDF();
+            }
+          } else {
+            setLoadingMessage('Loading local URDF (offline mode)...');
+            urdfString = await loadLocalURDF();
+          }
+
+          setLoadingMessage('Parsing URDF...');
+          const urdf = parseURDF(urdfString);
+
+          // Build scene from URDF
+          setLoadingMessage('Building 3D scene...');
+          builder = new URDFBuilder(urdf, (msg) => {
+            setLoadingMessage(msg);
+          });
+
+          robotScene = await builder.build();
+          robotScene.rotation.x = -Math.PI / 2;
+          robotScene.position.y = 0.3;
+          scene.add(robotScene);
         }
 
-        setLoadingMessage('Parsing URDF...');
-        console.log('[RobotViewer] Parsing URDF...');
-        const urdf = parseURDF(urdfString);
-        console.log('[RobotViewer] ✅ URDF parsed successfully');
-        console.log('[RobotViewer] Robot root:', urdf.robot?.$.name);
-
-        // Build scene from URDF
-        setLoadingMessage('Building 3D scene...');
-        console.log('[RobotViewer] Building 3D scene from URDF...');
-        const builder = new URDFBuilder(urdf, (msg) => {
-          console.log('[RobotViewer]', msg);
-          setLoadingMessage(msg);
-        });
-
-        const robotScene = await builder.build();
-        console.log('[RobotViewer] ✅ Robot scene built successfully');
-        console.log('[RobotViewer] Robot scene children count:', robotScene.children.length);
-
         robotGroupRef.current = robotScene;
-
-        // Fix z-up to y-up for InMoov (rotate 90 degrees around X axis)
-        robotScene.rotation.x = -Math.PI / 2;
-        robotScene.position.y = 0.3; // Lift robot up
-
-        scene.add(robotScene);
         urdfBuilderRef.current = builder;
 
         console.log('[RobotViewer] Robot added to scene at position:', robotScene.position);
@@ -265,35 +274,37 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
         animate();
 
         // Setup mouse controls
-        const controlsCleanup = setupControls(
-          renderer,
-          camera,
-          () => orbitTargetRef.current,
-          () => {
-            hasUserInteractedRef.current = true;
-          },
-          () => isDraggingHandleRef.current
-        );
-        cleanupFns.push(controlsCleanup);
-        const handDragCleanup = setupHandDragControls({
-          renderer,
-          camera,
-          robotRoot: robotScene,
-          getHandles: () => handHandlesRef.current,
-          onUserInteraction: () => {
-            hasUserInteractedRef.current = true;
-          },
-          isDraggingHandleRef,
-          getCurrentAngles: () => latestJointsRef.current,
-          updateLocalJoint: (jointName, degrees) => {
-            const radians = THREE.MathUtils.degToRad(degrees);
-            builder.updateJoint(jointName, radians);
-          },
-          sendServo: (id, angle) => {
-            onServoCommand?.({ id, angle });
-          },
-        });
-        cleanupFns.push(handDragCleanup);
+        if (!isIntroMode) {
+          const controlsCleanup = setupControls(
+            renderer,
+            camera,
+            () => orbitTargetRef.current,
+            () => {
+              hasUserInteractedRef.current = true;
+            },
+            () => isDraggingHandleRef.current
+          );
+          cleanupFns.push(controlsCleanup);
+          const handDragCleanup = setupHandDragControls({
+            renderer,
+            camera,
+            robotRoot: robotScene,
+            getHandles: () => handHandlesRef.current,
+            onUserInteraction: () => {
+              hasUserInteractedRef.current = true;
+            },
+            isDraggingHandleRef,
+            getCurrentAngles: () => latestJointsRef.current,
+            updateLocalJoint: (jointName, degrees) => {
+              const radians = THREE.MathUtils.degToRad(degrees);
+              builder.updateJoint(jointName, radians);
+            },
+            sendServo: (id, angle) => {
+              onServoCommand?.({ id, angle });
+            },
+          });
+          cleanupFns.push(handDragCleanup);
+        }
 
         setIsLoading(false);
         setLoadingMessage('');
@@ -319,7 +330,7 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
         rendererRef.current.dispose();
       }
     };
-  }, [isConnected, config.rosUrl, onError, onModelReady, onServoCommand]);
+  }, [isConnected, config.rosUrl, onError, onModelReady, onServoCommand, isIntroMode]);
 
   // Update joint angles from ROS2 joint_states
   useEffect(() => {
@@ -537,8 +548,6 @@ function setupControls(
   domElement.addEventListener('wheel', onWheel, { passive: false });
 
   console.log('[RobotViewer setupControls] Wheel listener added with passive: false');
-  domElement.addEventListener('mouseup', onMouseUp);
-  domElement.addEventListener('wheel', onWheel, { passive: false });
 
   return () => {
     domElement.removeEventListener('mousedown', onMouseDown);

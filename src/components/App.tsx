@@ -13,6 +13,7 @@ import { useAppStore } from '../store/appStore';
 import { ServoCommand, ROS2Topic, ROSState, RobotMode } from '../types';
 import { ROSService } from '../services/ros.service';
 import { ModeService } from '../services/modeService';
+import { ModelService } from '../services/model.service';
 
 const App: React.FC = () => {
   const { config, updateConfig, saveConfig, loadConfig } = useAppStore();
@@ -28,7 +29,9 @@ const App: React.FC = () => {
   const [topics, setTopics] = useState<ROS2Topic[]>([]);
   const [isLoadingTopics, setIsLoadingTopics] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
-  const [showStartupIntro, setShowStartupIntro] = useState<boolean>(false);
+  const [showStartupIntro, setShowStartupIntro] = useState<boolean>(true);
+  const [aiNodeActive, setAiNodeActive] = useState<boolean>(false);
+  const lastAiHeartbeat = useRef<number>(0);
 
   const rosServiceRef = useRef<ROSService | null>(null);
   const modeServiceRef = useRef<ModeService | null>(null);
@@ -66,6 +69,13 @@ const App: React.FC = () => {
       setIsLoadingTopics(true);
       const topicList = await service.getTopics();
       setTopics(topicList);
+
+      // Subscribe to AI Heartbeat
+      service.subscribe('/axel/heartbeat', 'std_msgs/String', (msg: any) => {
+        lastAiHeartbeat.current = Date.now();
+        setAiNodeActive(true);
+      });
+
       setIsLoadingTopics(false);
     } catch (error) {
       setRosState({
@@ -90,8 +100,13 @@ const App: React.FC = () => {
     }
   }, [connectROS, isReconnecting]);
 
-  // Initialize ROS connection once on app start.
+  // Initialize ROS connection and Preload 3D Model once on app start.
   useEffect(() => {
+    // Start preloading the heavy 3D assets immediately
+    ModelService.getInstance().preloadModel().catch(err => {
+      console.error('Initial model preload failed:', err);
+    });
+
     const timer = setTimeout(() => {
       handleReconnectROS();
     }, 1000);
@@ -114,6 +129,16 @@ const App: React.FC = () => {
       setRosState(prev => (prev.isConnected === connected ? prev : { ...prev, isConnected: connected }));
     }, 500);
 
+    return () => window.clearInterval(timer);
+  }, []);
+
+  // Monitor AI Heartbeat timeout
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (Date.now() - lastAiHeartbeat.current > 5000) {
+        setAiNodeActive(false);
+      }
+    }, 2000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -186,7 +211,6 @@ const App: React.FC = () => {
           <Visualization3DPage
             joints={joints}
             jointStatesByName={jointStatesByName}
-            onServoCommand={handleServoCommand}
             rosService={rosServiceRef.current}
             onReconnectROS={handleReconnectROS}
             isReconnecting={isReconnecting}
@@ -194,7 +218,7 @@ const App: React.FC = () => {
           />
         );
       case 7:
-        return <ManualServoControlPage joints={joints} onServoCommand={handleServoCommand} rosService={rosServiceRef.current} />;
+        return <ManualServoControlPage joints={joints} rosService={rosServiceRef.current} />;
       case 4:
         return <RosMonitorPage topics={topics} isLoading={isLoadingTopics} />;
       case 5:
@@ -219,7 +243,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-screen bg-gray-900 text-white overflow-hidden">
+    <div className="flex h-screen w-screen overflow-hidden" style={{ background: 'var(--axel-bg)', color: 'var(--axel-text)' }}>
       {/* Sidebar Navigation */}
       <Sidebar
         currentPage={currentPage}
@@ -230,13 +254,13 @@ const App: React.FC = () => {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top Status Bar */}
-        <div className="h-12 bg-gray-800 border-b border-gray-700 px-6 flex items-center gap-6 text-sm">
+        <div className="h-12 axel-surface border-b border-slate-700/70 px-6 flex items-center gap-6 text-sm">
           <div className="flex items-center gap-2">
             <span
               className={`w-2 h-2 rounded-full ${rosState.isConnected ? 'bg-green-500' : 'bg-red-500'
                 }`}
             />
-            <span className="text-gray-400">ROS:</span>
+            <span className="axel-muted">ROS:</span>
             <span className={rosState.isConnected ? 'text-green-400' : 'text-red-400'}>
               {rosState.isConnected ? 'Connected' : 'Disconnected'}
             </span>
@@ -247,14 +271,25 @@ const App: React.FC = () => {
               className={`w-2 h-2 rounded-full ${cameraConnected ? 'bg-green-500' : 'bg-red-500'
                 }`}
             />
-            <span className="text-gray-400">Camera:</span>
+            <span className="axel-muted">Camera:</span>
             <span className={cameraConnected ? 'text-green-400' : 'text-red-400'}>
               {cameraConnected ? 'Online' : 'Offline'}
             </span>
           </div>
 
+          <div className="flex items-center gap-2">
+            <span
+              className={`w-2 h-2 rounded-full ${aiNodeActive ? 'bg-green-500' : 'bg-gray-500'
+                }`}
+            />
+            <span className="axel-muted">AI Node:</span>
+            <span className={aiNodeActive ? 'text-green-400' : 'text-gray-400'}>
+              {aiNodeActive ? 'Active' : 'Standby'}
+            </span>
+          </div>
+
           <div className="ml-auto flex items-center gap-2">
-            <span className="text-blue-400 font-semibold">{config.robotName}</span>
+            <span className="axel-accent font-semibold">{config.robotName}</span>
           </div>
         </div>
 

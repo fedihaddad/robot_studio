@@ -61,7 +61,7 @@ export interface ServoPreset {
 }
 
 // Robot Mode Types
-export type RobotMode = 'GENERAL' | 'SECURITY' | 'SOCIAL' | 'MANUAL';
+export type RobotMode = 'GENERAL' | 'EDUCATION' | 'HEALTH' | 'KIDS' | 'ASSISTANT' | 'PROFESSIONAL' | 'MANUAL';
 
 export interface RobotModeCapabilities {
   mode: RobotMode;

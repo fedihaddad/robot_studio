@@ -21,6 +21,11 @@ const squirrelConfig =
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    // Base icon path (without extension):
+    // - Windows: assets/icons/icon.ico
+    // - macOS: assets/icons/icon.icns
+    // - Linux: assets/icons/icon.png
+    icon: 'assets/icons/icon',
   },
   rebuildConfig: {},
   makers: [

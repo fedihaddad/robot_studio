@@ -21,7 +21,7 @@ const navItems: NavItem[] = [
   { id: 'manual_servo', label: 'Manual Control', icon: '🎮', page: 7 },
   { id: 'ros', label: 'ROS2 Monitor', icon: '📡', page: 4 },
   { id: 'settings', label: 'Settings', icon: '⚙️', page: 5 },
-  { id: 'modes', label: 'Control Modes', icon: '🎛️', page: 8 },
+  { id: 'modes', label: 'Live Axel', icon: '🎛️', page: 8 },
 ];
 
 const Sidebar: React.FC<SidebarProps> = ({ 
@@ -30,15 +30,15 @@ const Sidebar: React.FC<SidebarProps> = ({
   rosConnected 
 }) => {
   return (
-    <div className="w-64 h-screen bg-gray-900 border-r border-gray-800 flex flex-col">
+    <div className="w-64 h-screen axel-surface border-r border-slate-700/70 flex flex-col">
       {/* Header */}
-      <div className="p-6 border-b border-gray-800">
-        <h1 className="text-2xl font-bold text-blue-400">🤖 AXEL</h1>
-        <p className="text-sm text-gray-500 mt-1">Control Dashboard</p>
-        <div className={`mt-3 inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${
+      <div className="p-6 border-b border-slate-700/60">
+        <h1 className="text-2xl font-bold axel-gradient-text">AXEL</h1>
+        <p className="text-sm axel-muted mt-1">Control Dashboard</p>
+        <div className={`mt-3 inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium border ${
           rosConnected 
-            ? 'bg-green-900 text-green-300' 
-            : 'bg-red-900 text-red-300'
+            ? 'bg-emerald-900/20 text-emerald-300 border-emerald-500/30' 
+            : 'bg-rose-900/20 text-rose-300 border-rose-500/30'
         }`}>
           <span className="w-2 h-2 rounded-full bg-current animate-pulse" />
           {rosConnected ? 'ROS Connected' : 'ROS Disconnected'}
@@ -52,12 +52,12 @@ const Sidebar: React.FC<SidebarProps> = ({
             key={item.id}
             onClick={() => onPageChange(item.page)}
             className={`
-              w-full px-4 py-3 rounded-lg text-left font-medium transition-all duration-200
+              w-full px-4 py-3 rounded-xl text-left font-medium transition-all duration-200
               flex items-center gap-3
               ${
                 currentPage === item.page
-                  ? 'bg-blue-600 text-white shadow-lg'
-                  : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'
+                  ? 'axel-button-primary text-white shadow-[0_0_0_1px_rgba(57,184,164,0.35)]'
+                  : 'text-slate-300 hover:bg-slate-800/70 hover:text-white border border-transparent hover:border-slate-600/60'
               }
             `}
           >

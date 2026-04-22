@@ -453,14 +453,13 @@ export class URDFBuilder {
 
     // For Electron apps running in file:// protocol
     if (typeof window !== 'undefined' && window.location?.protocol === 'file:') {
-      // Try to resolve relative to app root
       try {
-        // In Electron, assets in public/ are served from the app root
-        const electronPath = new URL(`file://${normalized}`, window.location.href).toString();
-        return electronPath;
-      } catch (e) {
-        // Fallback to simple path
-        return `${normalized}`;
+        // In packaged Electron, renderer entry is in .../renderer/<window>/index.html
+        // and static assets are copied next to it (e.g. .../renderer/<window>/meshes/...).
+        const baseDir = new URL('./', window.location.href);
+        return new URL(normalized, baseDir).toString();
+      } catch {
+        return normalized;
       }
     }
 

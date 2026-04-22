@@ -16,6 +16,7 @@ import { TrajectoryPlayer, PlaybackState, PlaybackCallback } from '../../service
 import { SRDFParser } from '../../services/srdf.parser';
 import { ROSService, JOINT_NAME_TO_SERVO_ID } from '../../services/ros.service';
 import { useAppStore } from '../../store/appStore';
+import { ModelService } from '../../services/model.service';
 
 export interface EnhancedVisualizationProps {
   joints: Record<number, number>;
@@ -168,32 +169,49 @@ const EnhancedVisualization: React.FC<EnhancedVisualizationProps> = ({
         controls.minDistance = 0.2;
         controls.maxPolarAngle = Math.PI / 2 + 0.1; // Don't go too far below ground
 
-        // Load URDF
-        setLoadingMessage('Loading URDF...');
-        let urdfString: string;
-        try {
-          if (isConnected && rosServiceRef.current) {
-            urdfString = await rosServiceRef.current.loadURDF();
-          } else {
+        // Load URDF & Build Robot
+        const modelService = ModelService.getInstance();
+        let robotScene: THREE.Group;
+        let builder: URDFBuilder;
+
+        if (modelService.isModelReady()) {
+          setLoadingMessage('Using preloaded model...');
+          // Clone the robot scene to allow multiple views or clean restarts
+          // Note: updateJoint needs the specific builder instance
+          builder = modelService.getBuilder()!;
+          robotScene = modelService.getRobotScene()!;
+          
+          // Re-add to current scene (it will be removed from any previous parent)
+          scene.add(robotScene);
+        } else {
+          // Fallback to manual load if not ready
+          setLoadingMessage('Loading URDF...');
+          let urdfString: string;
+          try {
+            if (isConnected && rosServiceRef.current) {
+              urdfString = await rosServiceRef.current.loadURDF();
+            } else {
+              const response = await fetch('/data/inmoov-local.urdf');
+              urdfString = await response.text();
+            }
+          } catch (err) {
             const response = await fetch('/data/inmoov-local.urdf');
             urdfString = await response.text();
           }
-        } catch (err) {
-          const response = await fetch('/data/inmoov-local.urdf');
-          urdfString = await response.text();
+
+          setLoadingMessage('Parsing URDF...');
+          const urdf = parseURDF(urdfString);
+
+          // Build robot
+          setLoadingMessage('Building robot scene...');
+          builder = new URDFBuilder(urdf, msg => setLoadingMessage(msg));
+          robotScene = await builder.build();
+          robotScene.rotation.x = -Math.PI / 2;
+          robotScene.position.y = 0.3;
+          scene.add(robotScene);
         }
 
-        setLoadingMessage('Parsing URDF...');
-        const urdf = parseURDF(urdfString);
-
-        // Build robot
-        setLoadingMessage('Building robot scene...');
-        const builder = new URDFBuilder(urdf, msg => setLoadingMessage(msg));
-        const robotScene = await builder.build();
         robotGroupRef.current = robotScene;
-        robotScene.rotation.x = -Math.PI / 2;
-        robotScene.position.y = 0.3;
-        scene.add(robotScene);
         urdfBuilderRef.current = builder;
 
         // Auto-fit camera to robot
@@ -223,7 +241,10 @@ const EnhancedVisualization: React.FC<EnhancedVisualizationProps> = ({
           setLoadingMessage('Loading collision meshes...');
           const collisionLoader = new CollisionMeshLoader();
           collisionLoaderRef.current = collisionLoader;
-          await collisionLoader.loadAllCollisionMeshes(urdf.links, '/meshes/');
+          
+          // Use URDF from service or builder
+          const currentURDF = modelService.getURDF() || (builder as any).urdf;
+          await collisionLoader.loadAllCollisionMeshes(currentURDF.links, '/meshes/');
           scene.add(collisionLoader.getCollisionGroup());
           collisionLoader.setCollisionVisibility(false); // Hidden by default
         }

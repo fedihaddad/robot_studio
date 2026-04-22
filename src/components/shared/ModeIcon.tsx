@@ -4,8 +4,10 @@ import {
   AcademicCapIcon,
   HeartIcon,
   UserGroupIcon,
-  WrenchIcon,
+  WrenchScrewdriverIcon,
   BriefcaseIcon,
+  FaceSmileIcon,
+  UserIcon,
 } from '@heroicons/react/24/outline';
 
 interface ModeIconProps {
@@ -19,8 +21,10 @@ const ICON_MAP: Record<string, React.ComponentType<React.SVGProps<SVGSVGElement>
   'AcademicCapIcon': AcademicCapIcon,
   'HeartIcon': HeartIcon,
   'UserGroupIcon': UserGroupIcon,
-  'WrenchIcon': WrenchIcon,
+  'WrenchScrewdriverIcon': WrenchScrewdriverIcon,
   'BriefcaseIcon': BriefcaseIcon,
+  'FaceSmileIcon': FaceSmileIcon,
+  'UserIcon': UserIcon,
 };
 
 const ModeIcon: React.FC<ModeIconProps> = ({ iconName, className = 'w-6 h-6' }) => {

@@ -4,7 +4,7 @@ export const ROBOT_MODES: Record<string, RobotModeCapabilities> = {
   GENERAL: {
     mode: 'GENERAL',
     label: 'General Mode',
-    description: 'Standard Axel identity: Multi-task vocal assistant. Supports Darija, French, English, and Arabic.',
+    description: 'Default mode: Multi-task vocal assistant. All tools available. Standard Axel identity.',
     icon: 'Cog6ToothIcon',
     color: 'text-blue-400',
     bgColor: 'bg-blue-900/30',
@@ -14,37 +14,113 @@ export const ROBOT_MODES: Record<string, RobotModeCapabilities> = {
     allowWebSearch: true,
     allowVisionAnalysis: true,
     safetyLevel: 'medium',
-    systemPrompt: 'NOM: Axel. Assistant vocal multi-tâche. Créateurs: Ahmed Chetoui & Fadi Hadded. Supervision: Chawki Gharsellewi. Langues: Darija Tunisienne, Français, English, Arabe.',
+    systemPrompt: `🔴 IDENTITÉ :
+- NOM : Axel. Robot humanoïde physique réel.
+- RÔLE : Assistant vocal multi-tâche, multi-domaine.
+- CRÉATEURS : Ahmed Chetoui & Fadi Hadded.
+- SUPERVISION : Chawki Gharsellewi.
+- Tu assumes pleinement ta nature de robot.
+
+🔴 PERFORMANCE ⚡ (LATENCE ZÉRO) :
+- RÉPONSE INSTANTANÉE OBLIGATOIRE. NE VERBALISE JAMAIS ton raisonnement interne.
+- Réponds DIRECTEMENT sans expliquer ta logique, tes observations, ni tes analyses.
+
+🔴 LANGUES : Darija Tunisienne · Français · English · العربية الفصحى.
+- Répondre TOUJOURS dans la même langue que l'utilisateur.`,
   },
-  SECURITY: {
-    mode: 'SECURITY',
-    label: 'Security Mode',
-    description: 'Enhanced vision analysis and monitoring. Surveillance and object detection priority.',
-    icon: 'ShieldCheckIcon',
-    color: 'text-red-400',
-    bgColor: 'bg-red-900/30',
-    borderColor: 'border-red-700/50',
-    allowedTools: ['vision', 'system'],
+  EDUCATION: {
+    mode: 'EDUCATION',
+    label: 'Education Mode (تعليم)',
+    description: 'Teaching and learning focus. Educational domain knowledge and pedagogy.',
+    icon: 'AcademicCapIcon',
+    color: 'text-green-400',
+    bgColor: 'bg-green-900/30',
+    borderColor: 'border-green-700/50',
+    allowedTools: ['education', 'search', 'vision'],
+    allowPhysicalActions: true,
+    allowWebSearch: true,
+    allowVisionAnalysis: true,
+    safetyLevel: 'medium',
+    systemPrompt: `MODE ÉDUCATION :
+- RÔLE : Enseignant et tuteur interactif.
+- OBJECTIF : Expliquer des concepts complexes de manière simple.
+- Priorité à la pédagogie et à l'apprentissage.
+- Utilise des exemples concrets et encourage l'utilisateur.`,
+  },
+  HEALTH: {
+    mode: 'HEALTH',
+    label: 'Health Mode (صحة)',
+    description: 'Health consultations and wellness advice. No physical actions for safety.',
+    icon: 'HeartIcon',
+    color: 'text-rose-400',
+    bgColor: 'bg-rose-900/30',
+    borderColor: 'border-rose-700/50',
+    allowedTools: ['health', 'search'],
+    allowPhysicalActions: false,
+    allowWebSearch: true,
+    allowVisionAnalysis: false,
+    safetyLevel: 'high',
+    systemPrompt: `MODE SANTÉ :
+- RÔLE : Conseiller bien-être et santé.
+- ⚠️ AVERTISSEMENT : Tu n'es pas un médecin humain. Donne des conseils généraux.
+- 🚫 ACTIONS PHYSIQUES INTERDITES pour la sécurité de l'utilisateur.
+- Focus sur l'empathie et les conseils de prévention.`,
+  },
+  KIDS: {
+    mode: 'KIDS',
+    label: 'Kids Mode (أطفال)',
+    description: 'Child-friendly interaction. Simplified language, no web access.',
+    icon: 'FaceSmileIcon',
+    color: 'text-orange-400',
+    bgColor: 'bg-orange-900/30',
+    borderColor: 'border-orange-700/50',
+    allowedTools: ['games', 'stories'],
     allowPhysicalActions: true,
     allowWebSearch: false,
-    allowVisionAnalysis: true,
+    allowVisionAnalysis: false,
     safetyLevel: 'high',
-    systemPrompt: 'MODE SÉCURITÉ: Priorité à l\'analyse visuelle et à la détection d\'objets. Reste vigilant et signale toute anomalie.',
+    systemPrompt: `MODE ENFANTS :
+- RÔLE : Compagnon de jeu et conteur d'histoires.
+- LANGUE : Très simple, amusante et sécurisée.
+- 🚫 ACCÈS WEB INTERDIT.
+- Reste toujours positif et encourageant.`,
   },
-  SOCIAL: {
-    mode: 'SOCIAL',
-    label: 'Social Mode',
-    description: 'Friendly interaction in Darija. Focus on emotions and warm communication.',
-    icon: 'ChatBubbleLeftRightIcon',
-    color: 'text-pink-400',
-    bgColor: 'bg-pink-900/30',
-    borderColor: 'border-pink-700/50',
-    allowedTools: ['communication', 'entertainment'],
+  ASSISTANT: {
+    mode: 'ASSISTANT',
+    label: 'Assistant Mode (مساعدة)',
+    description: 'Productivity and organization assistance. Tasks and scheduling.',
+    icon: 'UserIcon',
+    color: 'text-purple-400',
+    bgColor: 'bg-purple-900/30',
+    borderColor: 'border-purple-700/50',
+    allowedTools: ['calendar', 'tasks', 'email'],
     allowPhysicalActions: true,
+    allowWebSearch: true,
+    allowVisionAnalysis: true,
+    safetyLevel: 'medium',
+    systemPrompt: `MODE ASSISTANT :
+- RÔLE : Assistant personnel d'organisation.
+- OBJECTIF : Aider à la gestion des tâches, rappels et productivité.
+- Sois efficace, précis et organisé.`,
+  },
+  PROFESSIONAL: {
+    mode: 'PROFESSIONAL',
+    label: 'Professional Mode (خدمة)',
+    description: 'Business contexts. Formal tone, no physical movements.',
+    icon: 'BriefcaseIcon',
+    color: 'text-indigo-400',
+    bgColor: 'bg-indigo-900/30',
+    borderColor: 'border-indigo-700/50',
+    allowedTools: ['professional', 'search'],
+    allowPhysicalActions: false,
     allowWebSearch: true,
     allowVisionAnalysis: false,
     safetyLevel: 'medium',
-    systemPrompt: 'MODE SOCIAL: Réponds de manière chaleureuse et amicale en Darija Tunisienne. Utilise des expressions comme "ya sahbi" et "chnahwelk".',
+    systemPrompt: `MODE PROFESSIONNEL :
+- RÔLE : Consultant et assistant en milieu de travail.
+- TON : Formel, poli et professionnel.
+- 🚫 MOUVEMENTS PHYSIQUES MINIMISÉS.
+- Focus sur les faits, les données et l'efficacité au travail.`,
   },
   MANUAL: {
     mode: 'MANUAL',
@@ -59,9 +135,8 @@ export const ROBOT_MODES: Record<string, RobotModeCapabilities> = {
     allowWebSearch: false,
     allowVisionAnalysis: false,
     safetyLevel: 'low',
-    systemPrompt: 'MODE MANUEL: Contrôle direct des joints. Pas d\'interaction proactive.',
+    systemPrompt: `MODE MANUEL : Contrôle direct des joints. Pas d'interaction proactive.`,
   },
-
 };
 
 export const getModeCapabilities = (mode: string): RobotModeCapabilities => {

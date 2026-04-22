@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
+import fs from 'node:fs';
 import started from 'electron-squirrel-startup';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -8,11 +9,28 @@ if (started) {
 }
 
 const createWindow = () => {
+  const iconCandidates = process.platform === 'win32'
+    ? [
+        path.join(process.cwd(), 'assets/icons/icon.ico'),
+        path.join(__dirname, '../assets/icons/icon.ico'),
+        path.join(__dirname, '../../assets/icons/icon.ico'),
+        path.join(process.cwd(), 'assets/icons/icon.png'),
+        path.join(__dirname, '../assets/icons/icon.png'),
+        path.join(__dirname, '../../assets/icons/icon.png'),
+      ]
+    : [
+        path.join(process.cwd(), 'assets/icons/icon.png'),
+        path.join(__dirname, '../assets/icons/icon.png'),
+        path.join(__dirname, '../../assets/icons/icon.png'),
+      ];
+  const iconPath = iconCandidates.find((candidate) => fs.existsSync(candidate));
+
   // Create the browser window.
   const mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     show: false,
+    ...(iconPath ? { icon: iconPath } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },

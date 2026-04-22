@@ -5,6 +5,7 @@
 
 import { ServoCommand, ROS2Topic, TimestampedCommand } from '../types';
 import { timeSyncService } from './timeSynchronization.service';
+import { getServoConfig } from '../config/servoDegrees.config';
 
 declare global {
   interface Window {
@@ -30,6 +31,39 @@ export class ROSService {
   private lastJointPositions: Map<string, number> = new Map();
   private readonly jointDeltaThreshold = 1e-4; // radians
   private readonly dashboardTrajectoryTopic = '/joint_trajectory_controller/joint_trajectory';
+  private readonly controllerJointMap: Record<string, string[]> = {
+    right_arm_controller: [
+      'r_shoulder_out_joint',
+      'r_shoulder_lift_joint',
+      'r_upper_arm_roll_joint',
+      'r_elbow_flex_joint',
+      'r_wrist_roll_joint',
+    ],
+    left_arm_controller: [
+      'l_shoulder_out_joint',
+      'l_shoulder_lift_joint',
+      'l_upper_arm_roll_joint',
+      'l_elbow_flex_joint',
+      'l_wrist_roll_joint',
+    ],
+    right_hand_controller: [
+      'r_thumb1_joint', 'r_thumb_joint', 'r_thumb3_joint',
+      'r_index1_joint', 'r_index_joint', 'r_index3_joint',
+      'r_middle1_joint', 'r_middle_joint', 'r_middle3_joint',
+      'r_ring1_joint', 'r_ring_joint', 'r_ring3_joint', 'r_ring4_joint',
+      'r_pinky1_joint', 'r_pinky_joint', 'r_pinky3_joint', 'r_pinky4_joint',
+    ],
+    left_hand_controller: [
+      'l_thumb1_joint', 'l_thumb_joint', 'l_thumb3_joint',
+      'l_index1_joint', 'l_index_joint', 'l_index3_joint',
+      'l_middle1_joint', 'l_middle_joint', 'l_middle3_joint',
+      'l_ring1_joint', 'l_ring_joint', 'l_ring3_joint', 'l_ring4_joint',
+      'l_pinky1_joint', 'l_pinky_joint', 'l_pinky3_joint', 'l_pinky4_joint',
+    ],
+    head_controller: ['head_roll_joint', 'head_tilt_joint', 'head_pan_joint'],
+    face_controller: ['jaw_joint', 'eyes_tilt_joint', 'eyes_pan_joint', 'l_eye_pan_joint'],
+    torso_controller: ['waist_pan_joint', 'waist_roll_joint'],
+  };
 
   constructor(rosUrl: string) {
     if (!window.ROSLIB) {
@@ -222,11 +256,14 @@ export class ROSService {
       return;
     }
 
-    const targetRadians = (servo.angle * Math.PI) / 180;
+    const config = getServoConfig(servo.id);
+    const targetRadians = ((servo.angle - config.default) * Math.PI) / 180;
+    const controller = this.getControllerForJoint(jointName);
+    const controllerTopic = controller ? `/${controller}/joint_trajectory` : this.dashboardTrajectoryTopic;
     const latestJointState = this.getLatestServoState();
 
-    // Preferred: publish full joint vector based on latest /joint_states so controllers
-    // that require complete joint goals can accept the command.
+    // Preferred: publish full controller state based on latest /joint_states so
+    // per-group controllers receive a complete and coherent goal.
     if (
       latestJointState?.name &&
       latestJointState?.position &&
@@ -234,32 +271,58 @@ export class ROSService {
       Array.isArray(latestJointState.position) &&
       latestJointState.name.length === latestJointState.position.length
     ) {
-      const jointNames: string[] = [...latestJointState.name];
-      const positions: number[] = [...latestJointState.position];
-      const targetIndex = jointNames.indexOf(jointName);
+      const latestByName = new Map<string, number>();
+      latestJointState.name.forEach((name: string, idx: number) => {
+        const pos = latestJointState.position[idx];
+        if (Number.isFinite(pos)) {
+          latestByName.set(name, pos);
+        }
+      });
 
-      if (targetIndex !== -1) {
-        positions[targetIndex] = targetRadians;
-        this.publishJointTrajectory(jointNames, positions, 0.25);
-        window.terminalLogger?.log('[ROS TX] dashboard trajectory (full-state)', {
+      if (controller) {
+        const controllerJoints = this.controllerJointMap[controller] || [];
+        const hasFullControllerState =
+          controllerJoints.length > 0 && controllerJoints.every((name) => latestByName.has(name));
+
+        if (hasFullControllerState) {
+          const positions = controllerJoints.map((name) =>
+            name === jointName ? targetRadians : (latestByName.get(name) as number)
+          );
+          this.publishJointTrajectory(controllerTopic, controllerJoints, positions, 0.25);
+          window.terminalLogger?.log('[ROS TX] dashboard trajectory (controller full-state)', {
+            controller,
+            joint: jointName,
+            targetRadians,
+            topic: controllerTopic,
+          });
+          return;
+        }
+      }
+
+      if (latestByName.has(jointName)) {
+        this.publishJointTrajectory(controllerTopic, [jointName], [targetRadians], 0.25);
+        window.terminalLogger?.log('[ROS TX] dashboard trajectory (single-joint)', {
+          controller,
           joint: jointName,
           targetRadians,
-          topic: this.dashboardTrajectoryTopic,
+          topic: controllerTopic,
         });
         return;
       }
     }
 
     // Fallback: publish a single-joint trajectory.
-    this.publishJointTrajectory([jointName], [targetRadians], 0.25);
-    window.terminalLogger?.log('[ROS TX] dashboard trajectory (single-joint)', {
+    this.publishJointTrajectory(controllerTopic, [jointName], [targetRadians], 0.25);
+    window.terminalLogger?.log('[ROS TX] dashboard trajectory (fallback single-joint)', {
+      controller,
       joint: jointName,
       targetRadians,
-      topic: this.dashboardTrajectoryTopic,
+      topic: controllerTopic,
     });
   }
 
   private publishJointTrajectory(
+    topic: string,
     jointNames: string[],
     positions: number[],
     durationSeconds = 0.25
@@ -268,7 +331,7 @@ export class ROSService {
     const nanosec = Math.max(0, Math.floor((durationSeconds - sec) * 1e9));
 
     this.publish(
-      this.dashboardTrajectoryTopic,
+      topic,
       'trajectory_msgs/JointTrajectory',
       {
         joint_names: jointNames,
@@ -283,6 +346,15 @@ export class ROSService {
         ],
       }
     );
+  }
+
+  private getControllerForJoint(jointName: string): string | null {
+    for (const [controller, joints] of Object.entries(this.controllerJointMap)) {
+      if (joints.includes(jointName)) {
+        return controller;
+      }
+    }
+    return null;
   }
 
   publishVelocity(linear: number, angular: number): void {

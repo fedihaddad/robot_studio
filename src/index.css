@@ -2,6 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+:root {
+  --axel-blue: #0b4965;
+  --axel-turquoise: #39b8a4;
+  --axel-bg: #0b1220;
+  --axel-surface: #111827;
+  --axel-surface-soft: #1f2937;
+  --axel-border: #334155;
+  --axel-text: #f8fafc;
+  --axel-muted: #94a3b8;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -9,12 +22,11 @@
 }
 
 body {
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
-    sans-serif;
+  font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  @apply bg-gray-900 text-white;
+  background: var(--axel-bg);
+  color: var(--axel-text);
 }
 
 code {
@@ -23,26 +35,93 @@ code {
 }
 
 @layer utilities {
+  .axel-surface {
+    background: linear-gradient(180deg, rgba(17, 24, 39, 0.96), rgba(17, 24, 39, 0.88));
+    border: 1px solid rgba(51, 65, 85, 0.8);
+  }
+
+  .axel-card {
+    background: linear-gradient(180deg, rgba(17, 24, 39, 0.9), rgba(31, 41, 55, 0.8));
+    border: 1px solid rgba(51, 65, 85, 0.75);
+    border-radius: 14px;
+    box-shadow: 0 8px 20px rgba(2, 6, 23, 0.25);
+  }
+
+  .axel-title {
+    color: var(--axel-text);
+    letter-spacing: 0.01em;
+    font-weight: 700;
+  }
+
+  .axel-muted {
+    color: var(--axel-muted);
+  }
+
+  .axel-accent {
+    color: var(--axel-turquoise);
+  }
+
+  .axel-gradient-text {
+    background-image: linear-gradient(90deg, var(--axel-turquoise), #66d1bf, var(--axel-blue));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .axel-button-primary {
+    background: linear-gradient(90deg, var(--axel-blue), var(--axel-turquoise));
+    color: #f8fafc;
+    border: 1px solid rgba(57, 184, 164, 0.35);
+  }
+
+  .axel-button-primary:hover {
+    filter: brightness(1.05);
+  }
+
   .animate-spin-slow {
     animation: spin 12s linear infinite;
   }
   
-  .animate-pulse-glow {
-    animation: pulse-glow 3s ease-in-out infinite;
+  .animate-spin-extra-slow {
+    animation: spin 25s linear infinite;
+  }
+
+  .animate-reverse-spin-slow {
+    animation: reverse-spin 15s linear infinite;
+  }
+
+  .animate-pulse-slow {
+    animation: pulse 4s ease-in-out infinite;
+  }
+
+  .animate-float {
+    animation: float 3s ease-in-out infinite;
+  }
+
+  .animate-float-slow {
+    animation: float 6s ease-in-out infinite;
   }
   
   @keyframes spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
   }
+
+  @keyframes reverse-spin {
+    from { transform: rotate(360deg); }
+    to { transform: rotate(0deg); }
+  }
   
-  @keyframes pulse-glow {
-    0%, 100% { opacity: 0.5; transform: scale(1); }
-    50% { opacity: 0.8; transform: scale(1.05); }
+  @keyframes float {
+    0%, 100% { transform: translateY(0) scale(1); opacity: 0.4; }
+    50% { transform: translateY(-20px) scale(1.2); opacity: 0.8; }
   }
 
   .glass-card {
-    @apply bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl;
+    background: linear-gradient(180deg, rgba(17, 24, 39, 0.75), rgba(17, 24, 39, 0.6));
+    border: 1px solid rgba(51, 65, 85, 0.7);
+    box-shadow: 0 12px 28px rgba(2, 6, 23, 0.35);
+    backdrop-filter: blur(12px);
   }
 }
 

@@ -7,27 +7,35 @@ interface AudioVisualizerProps {
 
 const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ state, isActive }) => {
   const [pulseScale, setPulseScale] = useState(1);
+  const [morph, setMorph] = useState(0);
   const requestRef = useRef<number>();
 
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive) {
+      setPulseScale(1);
+      setMorph(0);
+      return;
+    }
 
     let startTime = Date.now();
-    
+
     const animate = () => {
       const elapsed = Date.now() - startTime;
-      
+
       if (state === 'listening') {
-        // Mocking voice activity with some randomness
-        setPulseScale(1 + Math.sin(elapsed / 100) * 0.1 + Math.random() * 0.05);
+        setPulseScale(1 + Math.sin(elapsed / 140) * 0.06 + Math.cos(elapsed / 260) * 0.02);
+        setMorph((Math.sin(elapsed / 420) + 1) / 2);
       } else if (state === 'speaking') {
-        setPulseScale(1.1 + Math.sin(elapsed / 80) * 0.15);
+        setPulseScale(1.08 + Math.sin(elapsed / 90) * 0.09 + Math.cos(elapsed / 170) * 0.04);
+        setMorph((Math.sin(elapsed / 180) + 1) / 2);
       } else if (state === 'thinking') {
-        setPulseScale(1.05 + Math.sin(elapsed / 200) * 0.05);
+        setPulseScale(1.02 + Math.sin(elapsed / 300) * 0.03);
+        setMorph((Math.sin(elapsed / 700) + 1) / 2);
       } else {
-        setPulseScale(1 + Math.sin(elapsed / 1000) * 0.03);
+        setPulseScale(1 + Math.sin(elapsed / 1200) * 0.015);
+        setMorph((Math.sin(elapsed / 1000) + 1) / 2);
       }
-      
+
       requestRef.current = requestAnimationFrame(animate);
     };
 
@@ -37,68 +45,87 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ state, isActive }) =>
     };
   }, [isActive, state]);
 
+  const getTheme = () => {
+    switch (state) {
+      case 'listening':
+        return {
+          base: 'from-teal-300 via-cyan-500 to-sky-600',
+          glow: 'bg-cyan-400/30',
+          line: 'rgba(45, 212, 191, 0.92)',
+        };
+      case 'speaking':
+        return {
+          base: 'from-violet-400 via-fuchsia-500 to-pink-500',
+          glow: 'bg-pink-500/30',
+          line: 'rgba(236, 72, 153, 0.92)',
+          extraGlow: 'rgba(251, 191, 36, 0.48)',
+        };
+      case 'thinking':
+        return {
+          base: 'from-blue-400 via-indigo-500 to-violet-600',
+          glow: 'bg-indigo-400/25',
+          line: 'rgba(99, 102, 241, 0.86)',
+        };
+      default:
+        return {
+        base: 'from-slate-600 via-slate-700 to-slate-900',
+        glow: 'bg-slate-600/20',
+        line: 'rgba(148, 163, 184, 0.72)',
+        extraGlow: 'rgba(148, 163, 184, 0)',
+        };
+    }
+  };
+
+  const theme = getTheme();
+  const shapeRadius = `${38 + Math.round(morph * 14)}% ${62 - Math.round(morph * 12)}% ${48 + Math.round(morph * 8)}% ${52 - Math.round(morph * 10)}% / ${44 + Math.round(morph * 16)}% ${56 - Math.round(morph * 8)}% ${58 - Math.round(morph * 10)}% ${42 + Math.round(morph * 12)}%`;
+
   return (
-    <div className="relative flex items-center justify-center w-full h-80 py-10">
-      {/* Outer Glows */}
-      <div 
-        className={`absolute w-64 h-64 rounded-full blur-[80px] transition-all duration-1000 ${
-          state === 'listening' ? 'bg-cyan-500/30' : 
-          state === 'thinking' ? 'bg-purple-500/30' : 
-          state === 'speaking' ? 'bg-blue-500/30' : 
-          'bg-slate-700/20'
-        }`}
-        style={{ transform: `scale(${pulseScale * 1.2})` }}
+    <div className="relative flex items-center justify-center w-full h-80 py-10 perspective-1000">
+      <div
+        className={`absolute w-72 h-72 rounded-full blur-[100px] transition-all duration-1000 mix-blend-screen ${theme.glow}`}
+        style={{ transform: `scale(${pulseScale * 1.3})` }}
       />
-      
-      <div 
-        className={`absolute w-48 h-48 rounded-full blur-[40px] transition-all duration-700 ${
-          state === 'listening' ? 'bg-cyan-400/40' : 
-          state === 'thinking' ? 'bg-indigo-400/40' : 
-          state === 'speaking' ? 'bg-blue-400/40' : 
-          'bg-slate-600/30'
-        }`}
+      <div
+        className={`absolute w-56 h-56 rounded-full blur-[60px] transition-all duration-700 mix-blend-screen opacity-60 ${theme.glow}`}
         style={{ transform: `scale(${pulseScale * 1.1})` }}
       />
 
-      {/* Main Orb Container */}
-      <div className="relative w-40 h-40 flex items-center justify-center">
-        {/* Rotating Rings (Thinking state) */}
-        {state === 'thinking' && (
-          <div className="absolute inset-0 border-2 border-dashed border-indigo-400/30 rounded-full animate-spin-slow" />
-        )}
-        
-        {/* Waveform Circles (Listening state) */}
-        {state === 'listening' && (
-          <>
-            <div className="absolute inset-0 border border-cyan-400/40 rounded-full animate-ping opacity-20" />
-            <div className="absolute inset-[-10px] border border-cyan-300/20 rounded-full animate-ping opacity-10" style={{ animationDelay: '0.5s' }} />
-          </>
-        )}
+      <div className="relative w-60 h-60 flex items-center justify-center">
+        <div
+          className="absolute inset-1 border border-white/15 transition-all duration-200"
+          style={{
+            borderRadius: shapeRadius,
+            transform: `scale(${1.03 + (pulseScale - 1) * 0.55})`,
+            opacity: isActive ? 0.95 : 0.45,
+            borderColor: theme.line,
+          }}
+        />
 
-        {/* The Central Gem / Orb */}
-        <div 
-          className={`relative w-32 h-32 rounded-full shadow-[0_0_50px_rgba(255,255,255,0.1)] overflow-hidden transition-all duration-500 border border-white/10 ${
-            state === 'listening' ? 'bg-gradient-to-br from-cyan-400 via-blue-500 to-indigo-600' :
-            state === 'thinking' ? 'bg-gradient-to-tr from-purple-500 via-indigo-600 to-blue-500' :
-            state === 'speaking' ? 'bg-gradient-to-bl from-blue-400 via-cyan-500 to-teal-400' :
-            'bg-slate-800'
-          }`}
-          style={{ transform: `scale(${pulseScale})` }}
+        <div
+          className="absolute inset-7 border border-white/10 transition-all duration-200"
+          style={{
+            borderRadius: shapeRadius,
+            transform: `scale(${1 + (pulseScale - 1) * 0.95})`,
+            borderColor: theme.line,
+          }}
+        />
+
+        <div
+          className={`relative w-36 h-36 overflow-hidden border border-white/15 ${theme.base} bg-gradient-to-br transition-all duration-150`}
+          style={{
+            borderRadius: shapeRadius,
+            transform: `scale(${1 + (pulseScale - 1) * 1.08})`,
+            borderColor: theme.line,
+            boxShadow: `0 0 80px ${theme.line.replace(/0\.\d+\)$/, '0.22)')}, 0 0 120px ${theme.extraGlow}`,
+          }}
         >
-          {/* Animated Interior Gradients */}
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_transparent_0%,_rgba(0,0,0,0.4)_100%)]" />
-          
-          {/* Fluid movement inside the orb */}
-          <div 
-            className={`absolute -inset-full opacity-60 mix-blend-overlay transition-transform duration-1000 ${
-              isActive ? 'animate-pulse' : ''
-            }`}
-            style={{ 
-              background: 'linear-gradient(45deg, transparent, rgba(255,255,255,0.2), transparent)',
-              transform: `rotate(${Date.now() / 20}deg)`
-            }}
-          />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,_rgba(255,255,255,0.22)_0%,_transparent_68%)]" />
+          <div className={`absolute inset-0 opacity-40 ${state === 'thinking' ? 'animate-spin-slow' : 'animate-spin-extra-slow'}`}>
+            <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/30 to-transparent" />
+          </div>
+          <div className="absolute inset-[32%] rounded-full bg-white/15 blur-xl" />
         </div>
+
       </div>
     </div>
   );

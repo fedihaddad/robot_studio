@@ -13,7 +13,6 @@ import { servoJointMapping } from '../config/complete-joints.config';
 interface Visualization3DPageProps {
   joints?: Record<number, number>;
   jointStatesByName?: Record<string, number>;
-  onServoCommand?: (command: ServoCommand) => void;
   rosService: ROSService | null;
   onReconnectROS?: () => void;
   isReconnecting?: boolean;
@@ -23,7 +22,6 @@ interface Visualization3DPageProps {
 const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
   joints = {},
   jointStatesByName = {},
-  onServoCommand,
   rosService,
   onReconnectROS,
   isReconnecting = false,
@@ -44,8 +42,11 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
   const {
     jointStates: offlineJointStates,
     updateJointState,
+    updateJointStates,
     resetJointStates,
   } = useAppStore();
+  const [gestureRunning, setGestureRunning] = useState(false);
+  const [gestureStatus, setGestureStatus] = useState<string>('Ready');
 
   const {
     servoStates,
@@ -59,6 +60,19 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
     enabled: true,
   });
   const isConnected = rosService?.isConnected() ?? servoHookConnected;
+
+  // UI normalization: present all joint sliders as 0..180 while preserving
+  // underlying robot-specific min/max ranges from config.
+  const toDisplayAngle = (rawAngle: number, min: number, max: number): number => {
+    if (max === min) return 90;
+    const normalized = ((rawAngle - min) / (max - min)) * 180;
+    return Math.max(0, Math.min(180, normalized));
+  };
+
+  const toRawAngle = (displayAngle: number, min: number, max: number): number => {
+    const clampedDisplay = Math.max(0, Math.min(180, displayAngle));
+    return min + (clampedDisplay / 180) * (max - min);
+  };
 
   const handleReconnectClick = () => {
     setReconnectAttempted(true);
@@ -129,7 +143,6 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
       console.log(`
   🟢 [ONLINE → ROS] Servo ${id} (${servoName}) set to ${angle.toFixed(1)}°`);
       sendCommand(command);
-      onServoCommand?.(command);
     } else {
       // Offline mode: update local joint state for visualization
       const jointName = SERVO_ID_TO_JOINT_NAME[id];
@@ -178,6 +191,130 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
   // Wrap for RobotViewer which needs (command: ServoCommand) signature
   const handleRobotViewerCommand = (command: ServoCommand) => {
     handleServoChange(command.id, command.angle);
+  };
+
+  const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+  const runOfflineGesture = async (gesture: 'salam' | 'home' | 'rest' | 'look_left' | 'look_right') => {
+    if (isConnected) {
+      setGestureStatus('Offline gestures are disabled while ROS is connected');
+      return;
+    }
+    if (gestureRunning) return;
+
+    setGestureRunning(true);
+    try {
+      switch (gesture) {
+        case 'home':
+          setGestureStatus('Moving to home pose...');
+          updateJointStates({
+            r_shoulder_out_joint: 0,
+            r_shoulder_lift_joint: 0,
+            r_upper_arm_roll_joint: 0,
+            r_elbow_flex_joint: 0,
+            r_wrist_roll_joint: 0,
+            l_shoulder_out_joint: 0,
+            l_shoulder_lift_joint: 0,
+            l_upper_arm_roll_joint: 0,
+            l_elbow_flex_joint: 0,
+            l_wrist_roll_joint: 0,
+            head_tilt_joint: 0,
+            head_pan_joint: 0,
+            jaw_joint: 0,
+          });
+          break;
+        case 'rest':
+          setGestureStatus('Moving to rest pose...');
+          updateJointStates({
+            // Match robot/inmoov_moveit_config/scripts/trajectory_servers.py initial_positions.
+            r_shoulder_out_joint: -0.567232006898157,
+            r_shoulder_lift_joint: -0.7853981633974483,
+            r_upper_arm_roll_joint: 0,
+            r_elbow_flex_joint: -0.8290313946973065,
+            r_wrist_roll_joint: -1.5707963267948966,
+            l_shoulder_out_joint: 0.567232006898157,
+            l_shoulder_lift_joint: -0.7853981633974483,
+            l_upper_arm_roll_joint: 0,
+            l_elbow_flex_joint: -0.8726646259971648,
+            l_wrist_roll_joint: 1.5707963267948966,
+          });
+          break;
+        case 'look_left':
+          setGestureStatus('Looking left...');
+          updateJointStates({ head_pan_joint: 0.35 });
+          break;
+        case 'look_right':
+          setGestureStatus('Looking right...');
+          updateJointStates({ head_pan_joint: -0.35 });
+          break;
+        case 'salam':
+          setGestureStatus('Performing salam gesture...');
+          // Match robot/inmoov_moveit_config/scripts/trajectory_servers.py right-arm wave.
+          const rightArmInitial = {
+            r_shoulder_out_joint: offlineJointStates.r_shoulder_out_joint ?? 0,
+            r_shoulder_lift_joint: offlineJointStates.r_shoulder_lift_joint ?? 0,
+            r_upper_arm_roll_joint: offlineJointStates.r_upper_arm_roll_joint ?? 0,
+            r_elbow_flex_joint: offlineJointStates.r_elbow_flex_joint ?? 0,
+            r_wrist_roll_joint: offlineJointStates.r_wrist_roll_joint ?? 0,
+          };
+          const rightHandJointNames = [
+            'r_thumb1_joint', 'r_thumb_joint', 'r_thumb3_joint',
+            'r_index1_joint', 'r_index_joint', 'r_index3_joint',
+            'r_middle1_joint', 'r_middle_joint', 'r_middle3_joint',
+            'r_ring1_joint', 'r_ring_joint', 'r_ring3_joint', 'r_ring4_joint',
+            'r_pinky1_joint', 'r_pinky_joint', 'r_pinky3_joint', 'r_pinky4_joint',
+          ] as const;
+          const rightHandInitial = rightHandJointNames.reduce<Record<string, number>>((acc, jointName) => {
+            acc[jointName] = offlineJointStates[jointName] ?? 0;
+            return acc;
+          }, {});
+          const openRightHand = rightHandJointNames.reduce<Record<string, number>>((acc, jointName) => {
+            acc[jointName] = 0;
+            return acc;
+          }, {});
+
+          const raisedPose = {
+            r_shoulder_out_joint: -0.10,
+            r_shoulder_lift_joint: -1.10,
+            r_upper_arm_roll_joint: 0.0,
+            r_elbow_flex_joint: -1.57,
+            r_wrist_roll_joint: 0.0,
+          };
+          const waveLeft = {
+            ...raisedPose,
+            r_shoulder_out_joint: -0.12,
+            r_upper_arm_roll_joint: 0.12,
+          };
+          const waveRight = {
+            ...raisedPose,
+            r_shoulder_out_joint: -0.32,
+            r_upper_arm_roll_joint: -0.12,
+          };
+
+          updateJointStates(openRightHand);
+          await sleep(600);
+          updateJointStates(raisedPose);
+          await sleep(1600);
+
+          for (let i = 0; i < 3; i += 1) {
+            updateJointStates(waveLeft);
+            await sleep(450);
+            updateJointStates(waveRight);
+            await sleep(450);
+          }
+
+          updateJointStates(rightArmInitial);
+          await sleep(1800);
+          updateJointStates(rightHandInitial);
+          break;
+      }
+      setGestureStatus('Done');
+    } catch (error) {
+      setGestureStatus('Gesture failed');
+    } finally {
+      window.setTimeout(() => setGestureStatus('Ready'), 1800);
+      setGestureRunning(false);
+    }
   };
 
   const headServoIds = getHeadServoIds();
@@ -241,19 +378,19 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
   }, [convertedServoStates, jointStatesByName, offlineJointStates, isConnected]);
 
   return (
-    <div className="p-6 h-full flex flex-col gap-6 bg-gradient-to-br from-[#020617] via-[#0f172a] to-[#0a1128] text-white">
+    <div className="p-6 h-full flex flex-col gap-6 text-white" style={{ background: 'var(--axel-bg)' }}>
       <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-4xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-300 mb-2 drop-shadow-md tracking-tight">
+          <h1 className="text-4xl font-bold axel-gradient-text mb-2 tracking-tight">
             3D Robot Visualization
           </h1>
-          <p className="text-slate-400 font-medium">Real-time visualization and control with interactive MoveIt features</p>
+          <p className="axel-muted font-medium">Real-time visualization and control with interactive MoveIt features</p>
         </div>
         <div className="flex gap-2 items-center">
           <div
-            className={`px-5 py-2.5 rounded-xl font-bold tracking-wide text-sm shadow-lg backdrop-blur-md border ${isConnected
-                ? 'bg-green-500/20 text-green-300 border-green-500/30'
-                : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+            className={`px-5 py-2.5 rounded-xl font-bold tracking-wide text-sm border ${isConnected
+                ? 'bg-emerald-900/20 text-emerald-300 border-emerald-500/30'
+                : 'bg-rose-900/20 text-rose-300 border-rose-500/30'
               }`}
           >
             {isConnected ? '🟢 Connected to ROS' : '📺 Offline Mode'}
@@ -262,15 +399,15 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
             <button
               onClick={handleReconnectClick}
               disabled={!onReconnectROS || isReconnecting}
-              className={`px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg text-sm ${isReconnecting
+              className={`px-5 py-2.5 rounded-xl font-bold transition-all text-sm ${isReconnecting
                   ? 'bg-slate-700/50 text-slate-400 cursor-not-allowed border border-slate-600/50'
-                  : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white border border-cyan-400/30 hover:shadow-[0_0_15px_rgba(34,211,238,0.4)]'
+                  : 'axel-button-primary text-white'
                 }`}
             >
               {isReconnecting ? 'Reconnecting...' : 'Reconnect ROS'}
             </button>
           )}
-          <label className="flex items-center gap-2 bg-slate-800/60 border border-white/5 backdrop-blur-md px-4 py-2.5 rounded-xl cursor-pointer hover:bg-slate-700/60 transition-colors shadow-lg">
+          <label className="flex items-center gap-2 axel-card px-4 py-2.5 rounded-xl cursor-pointer hover:bg-slate-700/40 transition-colors">
             <input
               type="checkbox"
               checked={useEnhancedVisualization}
@@ -283,7 +420,7 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
       </div>
 
       {!isConnected && (
-        <div className="bg-gradient-to-r from-indigo-900/40 to-blue-900/40 border border-blue-500/30 backdrop-blur-md rounded-2xl p-4 shadow-lg flex items-center gap-3">
+        <div className="axel-card rounded-2xl p-4 flex items-center gap-3">
           <div className="w-2 h-2 rounded-full bg-blue-400 animate-ping"></div>
           <p className="text-blue-100 font-medium">
             <strong className="text-blue-300">Offline Mode Active:</strong> Control the robot dynamically in simulation by clicking and dragging parts or using sliders!
@@ -303,7 +440,7 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
       )}
 
       <div className="flex-1 flex gap-6 overflow-hidden">
-        <div className="flex-1 min-w-0 h-full relative rounded-2xl overflow-hidden shadow-[0_0_40px_rgba(0,180,255,0.1)] border border-cyan-500/20 bg-slate-900/50 backdrop-blur-md">
+        <div className="flex-1 min-w-0 h-full relative rounded-2xl overflow-hidden border border-slate-700/70 axel-surface">
           {useEnhancedVisualization ? (
             <EnhancedVisualization
               joints={{}}
@@ -326,11 +463,11 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
           )}
         </div>
 
-        <div className="w-[380px] flex flex-col rounded-2xl bg-[#1e293b]/60 backdrop-blur-xl border border-white/10 shadow-2xl overflow-hidden">
-          <div className="bg-gradient-to-r from-blue-900/30 to-cyan-900/30 border-b border-white/5 p-4">
+        <div className="w-[380px] flex flex-col rounded-2xl axel-surface border border-slate-700/70 overflow-hidden">
+          <div className="border-b border-slate-700/60 p-4">
             <div className="flex justify-between items-center mb-2">
               <h2 className="text-base font-bold text-white tracking-tight">Live Control</h2>
-              <div className="flex gap-3 text-[10px] text-slate-400 font-medium">
+              <div className="flex gap-3 text-[10px] axel-muted font-medium">
                 <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></div> {new Date(lastUpdate).toLocaleTimeString()}</span>
                 <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div> {Object.keys(servoStates).length} Servos</span>
               </div>
@@ -338,16 +475,60 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
 
             <button
               onClick={handleResetRobot}
-              className="w-full px-4 py-2 bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-400 hover:to-pink-500 text-white font-bold rounded-lg transition-all shadow-md text-xs flex items-center justify-center gap-2 tracking-wide"
+              className="w-full px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg transition-all text-xs flex items-center justify-center gap-2 tracking-wide border border-rose-400/30"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
               Reset All Servos
             </button>
 
-            {useEnhancedVisualization && (
-              <div className="mt-3 border-t border-white/5 pt-3">
+            {!isConnected && (
+              <div className="mt-3 border-t border-slate-700/50 pt-3 space-y-2">
+                <p className="text-[10px] uppercase tracking-widest axel-muted">Offline Gestures</p>
                 <div className="grid grid-cols-2 gap-2">
-                  <label className="flex items-center gap-2 text-[10px] font-bold text-slate-400 cursor-pointer hover:text-white transition-colors bg-white/5 p-1.5 rounded-lg border border-white/5 hover:border-white/20 uppercase tracking-tighter">
+                  <button
+                    onClick={() => runOfflineGesture('salam')}
+                    disabled={gestureRunning}
+                    className="px-2 py-2 rounded-lg text-xs font-bold text-white bg-cyan-700/80 hover:bg-cyan-600 disabled:opacity-60 disabled:cursor-not-allowed border border-cyan-500/30"
+                  >
+                    Salam
+                  </button>
+                  <button
+                    onClick={() => runOfflineGesture('home')}
+                    disabled={gestureRunning}
+                    className="px-2 py-2 rounded-lg text-xs font-bold text-white bg-slate-700 hover:bg-slate-600 disabled:opacity-60 disabled:cursor-not-allowed border border-slate-500/40"
+                  >
+                    Home
+                  </button>
+                  <button
+                    onClick={() => runOfflineGesture('rest')}
+                    disabled={gestureRunning}
+                    className="px-2 py-2 rounded-lg text-xs font-bold text-white bg-violet-700/80 hover:bg-violet-600 disabled:opacity-60 disabled:cursor-not-allowed border border-violet-500/30"
+                  >
+                    Rest
+                  </button>
+                  <button
+                    onClick={() => runOfflineGesture('look_left')}
+                    disabled={gestureRunning}
+                    className="px-2 py-2 rounded-lg text-xs font-bold text-white bg-slate-700 hover:bg-slate-600 disabled:opacity-60 disabled:cursor-not-allowed border border-slate-500/40"
+                  >
+                    Look Left
+                  </button>
+                  <button
+                    onClick={() => runOfflineGesture('look_right')}
+                    disabled={gestureRunning}
+                    className="col-span-2 px-2 py-2 rounded-lg text-xs font-bold text-white bg-slate-700 hover:bg-slate-600 disabled:opacity-60 disabled:cursor-not-allowed border border-slate-500/40"
+                  >
+                    Look Right
+                  </button>
+                </div>
+                <p className="text-[11px] axel-muted">{gestureStatus}</p>
+              </div>
+            )}
+
+            {useEnhancedVisualization && (
+              <div className="mt-3 border-t border-slate-700/50 pt-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex items-center gap-2 text-[10px] font-bold text-slate-400 cursor-pointer hover:text-white transition-colors bg-slate-800/50 p-1.5 rounded-lg border border-slate-700/50 hover:border-slate-500/70 uppercase tracking-tighter">
                     <input
                       type="checkbox"
                       checked={showCollisions}
@@ -356,7 +537,7 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
                     />
                     Collisions
                   </label>
-                  <label className="flex items-center gap-2 text-[10px] font-bold text-slate-400 cursor-pointer hover:text-white transition-colors bg-white/5 p-1.5 rounded-lg border border-white/5 hover:border-white/20 uppercase tracking-tighter">
+                  <label className="flex items-center gap-2 text-[10px] font-bold text-slate-400 cursor-pointer hover:text-white transition-colors bg-slate-800/50 p-1.5 rounded-lg border border-slate-700/50 hover:border-slate-500/70 uppercase tracking-tighter">
                     <input
                       type="checkbox"
                       checked={showMarkers}
@@ -370,12 +551,12 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
             )}
           </div>
 
-          <div className="flex gap-2 p-3 bg-slate-900/50 border-b border-white/5">
+          <div className="flex gap-2 p-3 bg-slate-900/50 border-b border-slate-700/60">
             <button
               onClick={() => setActiveTab('head')}
               className={`flex-1 px-3 py-2.5 rounded-xl font-bold transition-all text-xs tracking-wider ${activeTab === 'head'
-                  ? 'bg-gradient-to-r from-blue-600 to-cyan-500 shadow-lg text-white'
-                  : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
+                  ? 'axel-button-primary text-white'
+                  : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/60 hover:text-white border border-transparent hover:border-slate-600/70'
                 }`}
             >
               HEAD ({headServoIds.length})
@@ -383,8 +564,8 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
             <button
               onClick={() => setActiveTab('arm')}
               className={`flex-1 px-3 py-2.5 rounded-xl font-bold transition-all text-xs tracking-wider ${activeTab === 'arm'
-                  ? 'bg-gradient-to-r from-blue-600 to-cyan-500 shadow-lg text-white'
-                  : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
+                  ? 'axel-button-primary text-white'
+                  : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/60 hover:text-white border border-transparent hover:border-slate-600/70'
                 }`}
             >
               ARM ({armServoIds.length})
@@ -392,8 +573,8 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
             <button
               onClick={() => setActiveTab('mode')}
               className={`flex-1 px-3 py-2.5 rounded-xl font-bold transition-all text-xs tracking-wider ${activeTab === 'mode'
-                  ? 'bg-gradient-to-r from-purple-600 to-pink-500 shadow-lg text-white'
-                  : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
+                  ? 'axel-button-primary text-white'
+                  : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/60 hover:text-white border border-transparent hover:border-slate-600/70'
                 }`}
             >
               MODE 🎯
@@ -412,28 +593,32 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
               <div className="space-y-3">
                 {headServoIds.map((servoId) => {
                   const config = getServoConfig(servoId);
-                  const currentAngle = isConnected
+                  const currentRawAngle = isConnected
                     ? (servoStates[servoId]?.angle ?? config.default)
                     : (currentSliderValues[servoId] ?? config.default);
+                  const currentDisplayAngle = toDisplayAngle(currentRawAngle, config.min, config.max);
 
                   return (
-                    <div key={servoId} className="group bg-white/5 hover:bg-white/10 p-4 rounded-2xl transition-all border border-transparent hover:border-cyan-500/30">
+                    <div key={servoId} className="group bg-slate-800/45 hover:bg-slate-700/50 p-4 rounded-2xl transition-all border border-transparent hover:border-cyan-500/30">
                       <div className="flex justify-between items-center mb-3">
                         <label className="text-[11px] font-bold text-slate-300 flex items-center gap-2 uppercase tracking-wide">
                           <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 opacity-50 group-hover:opacity-100 transition-opacity"></span>
                           {config.name} <span className="text-slate-500 ml-1">#{servoId}</span>
                         </label>
                         <div className="px-2 py-1 bg-black/40 rounded-lg text-xs text-cyan-300 font-mono shadow-inner border border-white/5">
-                          {currentAngle.toFixed(1)}°
+                          {currentDisplayAngle.toFixed(1)}°
                         </div>
                       </div>
                       <ServoSlider
                         id={servoId}
                         label=""
-                        value={currentAngle}
-                        min={config.min}
-                        max={config.max}
-                        onChange={(value) => handleServoChange(servoId, value)}
+                        value={currentDisplayAngle}
+                        min={0}
+                        max={180}
+                        onChange={(displayValue) => {
+                          const rawValue = toRawAngle(displayValue, config.min, config.max);
+                          handleServoChange(servoId, rawValue);
+                        }}
                       />
                     </div>
                   );
@@ -443,28 +628,32 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
               <div className="space-y-3">
                 {armServoIds.map((servoId) => {
                   const config = getServoConfig(servoId);
-                  const currentAngle = isConnected
+                  const currentRawAngle = isConnected
                     ? (servoStates[servoId]?.angle ?? config.default)
                     : (currentSliderValues[servoId] ?? config.default);
+                  const currentDisplayAngle = toDisplayAngle(currentRawAngle, config.min, config.max);
 
                   return (
-                    <div key={servoId} className="group bg-white/5 hover:bg-white/10 p-4 rounded-2xl transition-all border border-transparent hover:border-cyan-500/30">
+                    <div key={servoId} className="group bg-slate-800/45 hover:bg-slate-700/50 p-4 rounded-2xl transition-all border border-transparent hover:border-cyan-500/30">
                       <div className="flex justify-between items-center mb-3">
                         <label className="text-[11px] font-bold text-slate-300 flex items-center gap-2 uppercase tracking-wide">
                           <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 opacity-50 group-hover:opacity-100 transition-opacity"></span>
                           {config.name} <span className="text-slate-500 ml-1">#{servoId}</span>
                         </label>
                         <div className="px-2 py-1 bg-black/40 rounded-lg text-xs text-cyan-300 font-mono shadow-inner border border-white/5">
-                          {currentAngle.toFixed(1)}°
+                          {currentDisplayAngle.toFixed(1)}°
                         </div>
                       </div>
                       <ServoSlider
                         id={servoId}
                         label=""
-                        value={currentAngle}
-                        min={config.min}
-                        max={config.max}
-                        onChange={(value) => handleServoChange(servoId, value)}
+                        value={currentDisplayAngle}
+                        min={0}
+                        max={180}
+                        onChange={(displayValue) => {
+                          const rawValue = toRawAngle(displayValue, config.min, config.max);
+                          handleServoChange(servoId, rawValue);
+                        }}
                       />
                     </div>
                   );
