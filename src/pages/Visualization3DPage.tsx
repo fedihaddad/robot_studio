@@ -39,6 +39,7 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
   } | null>(null);
   const [currentSliderValues, setCurrentSliderValues] = useState<Record<number, number>>({});
   const [initialSliderValues, setInitialSliderValues] = useState<Record<number, number> | null>(null);
+  const [previewJointStatesOnline, setPreviewJointStatesOnline] = useState<Record<string, number>>({});
   const {
     jointStates: offlineJointStates,
     updateJointState,
@@ -60,6 +61,15 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
     enabled: true,
   });
   const isConnected = rosService?.isConnected() ?? servoHookConnected;
+
+  // When fresh /joint_states arrive while online, clear preview overrides gradually.
+  React.useEffect(() => {
+    if (!isConnected) return;
+    // Any ROS update indicates the robot is publishing state; prefer that over preview.
+    if (lastUpdate) {
+      setPreviewJointStatesOnline({});
+    }
+  }, [isConnected, lastUpdate]);
 
   // UI normalization: present all joint sliders as 0..180 while preserving
   // underlying robot-specific min/max ranges from config.
@@ -143,6 +153,18 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
       console.log(`
   🟢 [ONLINE → ROS] Servo ${id} (${servoName}) set to ${angle.toFixed(1)}°`);
       sendCommand(command);
+
+      // Also update local 3D preview immediately (so the model moves even if ROS doesn't echo /joint_states).
+      const jointNameFromConfig = (config as any).jointName as string | undefined;
+      const jointName = jointNameFromConfig || SERVO_ID_TO_JOINT_NAME[id];
+      if (jointName) {
+        const urdfAngle = angle - (config.default ?? 0);
+        const radians = (urdfAngle * Math.PI) / 180;
+        setPreviewJointStatesOnline((prev) => ({
+          ...prev,
+          [jointName]: radians,
+        }));
+      }
     } else {
       // Offline mode: update local joint state for visualization
       const jointName = SERVO_ID_TO_JOINT_NAME[id];
@@ -373,9 +395,10 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
     return {
       ...convertedServoStates,
       ...jointStatesByName,
+      ...(isConnected ? previewJointStatesOnline : {}),
       ...offlineOverrides, // Only override with offline states when ROS is disconnected
     };
-  }, [convertedServoStates, jointStatesByName, offlineJointStates, isConnected]);
+  }, [convertedServoStates, jointStatesByName, offlineJointStates, isConnected, previewJointStatesOnline]);
 
   return (
     <div className="p-6 h-full flex flex-col gap-6 text-white" style={{ background: 'var(--axel-bg)' }}>
@@ -593,9 +616,14 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
               <div className="space-y-3">
                 {headServoIds.map((servoId) => {
                   const config = getServoConfig(servoId);
-                  const currentRawAngle = isConnected
-                    ? (servoStates[servoId]?.angle ?? config.default)
-                    : (currentSliderValues[servoId] ?? config.default);
+                  // Prefer immediate UI value (optimistic) over ROS echo.
+                  const optimistic = currentSliderValues[servoId];
+                  const currentRawAngle =
+                    typeof optimistic === 'number'
+                      ? optimistic
+                      : isConnected
+                        ? (servoStates[servoId]?.angle ?? config.default)
+                        : (config.default ?? 0);
                   const currentDisplayAngle = toDisplayAngle(currentRawAngle, config.min, config.max);
 
                   return (
@@ -628,9 +656,14 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
               <div className="space-y-3">
                 {armServoIds.map((servoId) => {
                   const config = getServoConfig(servoId);
-                  const currentRawAngle = isConnected
-                    ? (servoStates[servoId]?.angle ?? config.default)
-                    : (currentSliderValues[servoId] ?? config.default);
+                  // Prefer immediate UI value (optimistic) over ROS echo.
+                  const optimistic = currentSliderValues[servoId];
+                  const currentRawAngle =
+                    typeof optimistic === 'number'
+                      ? optimistic
+                      : isConnected
+                        ? (servoStates[servoId]?.angle ?? config.default)
+                        : (config.default ?? 0);
                   const currentDisplayAngle = toDisplayAngle(currentRawAngle, config.min, config.max);
 
                   return (

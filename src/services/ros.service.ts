@@ -3,7 +3,7 @@
  * Handles communication with ROS2 through roslib
  */
 
-import { ServoCommand, ROS2Topic, TimestampedCommand } from '../types';
+import { ServoCommand, ROS2Topic } from '../types';
 import { timeSyncService } from './timeSynchronization.service';
 import { getServoConfig } from '../config/servoDegrees.config';
 
@@ -251,13 +251,20 @@ export class ROSService {
   }
 
   private publishServoAsJointTrajectory(servo: ServoCommand): void {
-    const jointName = SERVO_ID_TO_JOINT_NAME[servo.id];
+    // IMPORTANT:
+    // Dashboard servo IDs (1..39) are not the same as the internal URDF mapping IDs (0..56).
+    // Prefer the explicit jointName from `servoDegrees.config.ts` when available.
+    const config = getServoConfig(servo.id) as any;
+    const jointName: string | undefined =
+      (typeof config?.jointName === 'string' && config.jointName.length > 0
+        ? config.jointName
+        : SERVO_ID_TO_JOINT_NAME[servo.id]);
     if (!jointName) {
       return;
     }
 
-    const config = getServoConfig(servo.id);
-    const targetRadians = ((servo.angle - config.default) * Math.PI) / 180;
+    const defaultDegrees = typeof config?.default === 'number' ? config.default : 0;
+    const targetRadians = ((servo.angle - defaultDegrees) * Math.PI) / 180;
     const controller = this.getControllerForJoint(jointName);
     const controllerTopic = controller ? `/${controller}/joint_trajectory` : this.dashboardTrajectoryTopic;
     const latestJointState = this.getLatestServoState();

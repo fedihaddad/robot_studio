@@ -9,6 +9,7 @@ import RosMonitorPage from '../pages/RosMonitorPage';
 import SettingsPage from '../pages/SettingsPage';
 import ControlModePage from '../pages/ControlModePage';
 import Startup3DIntro from './shared/Startup3DIntro';
+import StatusBanner from './shared/StatusBanner';
 import { useAppStore } from '../store/appStore';
 import { ServoCommand, ROS2Topic, ROSState, RobotMode } from '../types';
 import { ROSService } from '../services/ros.service';
@@ -16,7 +17,7 @@ import { ModeService } from '../services/modeService';
 import { ModelService } from '../services/model.service';
 
 const App: React.FC = () => {
-  const { config, updateConfig, saveConfig, loadConfig } = useAppStore();
+  const { config, updateConfig, saveConfig, loadConfig, currentMode } = useAppStore();
   const [currentPage, setCurrentPage] = useState(1);
   const [cameraConnected, setCameraConnected] = useState(true);
   const [joints, setJoints] = useState<Record<number, number>>({});
@@ -35,6 +36,9 @@ const App: React.FC = () => {
 
   const rosServiceRef = useRef<ROSService | null>(null);
   const modeServiceRef = useRef<ModeService | null>(null);
+  const lastRosConnectedRef = useRef<boolean>(false);
+  const [dismissedRosBannerAt, setDismissedRosBannerAt] = useState<number>(0);
+  const [isConnectionCenterOpen, setIsConnectionCenterOpen] = useState(false);
 
   const connectROS = useCallback(async () => {
     try {
@@ -126,6 +130,10 @@ const App: React.FC = () => {
   useEffect(() => {
     const timer = window.setInterval(() => {
       const connected = !!rosServiceRef.current?.isConnected();
+      const prev = lastRosConnectedRef.current;
+      if (prev !== connected) {
+        lastRosConnectedRef.current = connected;
+      }
       setRosState(prev => (prev.isConnected === connected ? prev : { ...prev, isConnected: connected }));
     }, 500);
 
@@ -228,6 +236,12 @@ const App: React.FC = () => {
             onConfigChange={updateConfig}
             onSave={saveConfig}
             onLoad={loadConfig}
+            rosState={rosState}
+            rosService={rosServiceRef.current}
+            currentMode={currentMode}
+            aiNodeActive={aiNodeActive}
+            onReconnectROS={handleReconnectROS}
+            isReconnecting={isReconnecting}
           />
         );
       case 8:
@@ -289,9 +303,102 @@ const App: React.FC = () => {
           </div>
 
           <div className="ml-auto flex items-center gap-2">
+            <div className="relative">
+              <button
+                className="axel-button-secondary px-3 py-1.5 rounded-xl text-xs font-bold"
+                onClick={() => setIsConnectionCenterOpen((v) => !v)}
+                title="Connection Center"
+              >
+                Status
+              </button>
+              {isConnectionCenterOpen && (
+                <div className="absolute right-0 mt-2 w-[340px] rounded-2xl border border-slate-700/60 bg-slate-950/80 backdrop-blur p-3 shadow-2xl z-[120]">
+                  <p className="text-xs font-bold text-slate-200 mb-2">Connection Center</p>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="axel-muted">ROS</span>
+                      <span className={rosState.isConnected ? 'text-emerald-300' : 'text-rose-300'}>
+                        {rosState.isConnected ? 'Connected' : 'Disconnected'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="axel-muted">ROS URL</span>
+                      <span className="text-slate-200 font-mono text-[11px] truncate max-w-[220px]">{rosState.rosUrl}</span>
+                    </div>
+                    {rosState.error && (
+                      <div className="mt-2 rounded-xl border border-rose-500/20 bg-rose-950/40 p-2">
+                        <p className="text-rose-200 text-[11px] break-words">{rosState.error}</p>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between">
+                      <span className="axel-muted">Camera</span>
+                      <span className={cameraConnected ? 'text-emerald-300' : 'text-rose-300'}>
+                        {cameraConnected ? 'Online' : 'Offline'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="axel-muted">AI Node</span>
+                      <span className={aiNodeActive ? 'text-emerald-300' : 'text-slate-300'}>
+                        {aiNodeActive ? 'Active' : 'Standby'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center justify-end gap-2">
+                    {currentPage !== 5 && (
+                      <button
+                        className="axel-button-secondary px-3 py-2 rounded-xl text-xs font-bold"
+                        onClick={() => {
+                          setIsConnectionCenterOpen(false);
+                          setCurrentPage(5);
+                        }}
+                      >
+                        Open Settings
+                      </button>
+                    )}
+                    <button
+                      className="axel-button-primary px-3 py-2 rounded-xl text-xs font-bold disabled:opacity-50"
+                      onClick={() => {
+                        setIsConnectionCenterOpen(false);
+                        handleReconnectROS();
+                      }}
+                      disabled={isReconnecting}
+                    >
+                      {isReconnecting ? 'Reconnecting…' : 'Reconnect ROS'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
             <span className="axel-accent font-semibold">{config.robotName}</span>
           </div>
         </div>
+
+        {!showStartupIntro && !rosState.isConnected && Date.now() - dismissedRosBannerAt > 15000 && (
+          <StatusBanner
+            tone="error"
+            placement="floating-left"
+            title="ROS disconnected"
+            description={rosState.error ? rosState.error : 'No connection to rosbridge server. Check URL and network.'}
+            actions={[
+              {
+                label: isReconnecting ? 'Reconnecting…' : 'Reconnect',
+                onClick: handleReconnectROS,
+                variant: 'primary',
+                disabled: isReconnecting,
+              },
+              ...(currentPage !== 5
+                ? [
+                    {
+                      label: 'Open Settings',
+                      onClick: () => setCurrentPage(5),
+                      variant: 'secondary' as const,
+                    },
+                  ]
+                : []),
+            ]}
+            onDismiss={() => setDismissedRosBannerAt(Date.now())}
+          />
+        )}
 
         {/* Page Content */}
         <div className="flex-1 overflow-y-auto">

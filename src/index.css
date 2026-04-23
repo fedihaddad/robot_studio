@@ -1,8 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
 
 :root {
   --axel-blue: #0b4965;
@@ -76,6 +76,17 @@ code {
 
   .axel-button-primary:hover {
     filter: brightness(1.05);
+  }
+
+  .axel-button-secondary {
+    background: rgba(15, 23, 42, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    color: rgba(226, 232, 240, 0.92);
+  }
+
+  .axel-button-secondary:hover {
+    background: rgba(30, 41, 59, 0.6);
+    border-color: rgba(148, 163, 184, 0.32);
   }
 
   .animate-spin-slow {

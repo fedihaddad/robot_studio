@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { RobotMode } from '../types';
 import { ROBOT_MODES, getModeCapabilities } from '../config/robotModes.config';
 import { useAppStore } from '../store/appStore';
@@ -19,7 +19,12 @@ const ControlModePage: React.FC<ControlModePageProps> = ({ onModeChange, isConne
   const [isAudioActive, setIsAudioActive] = useState(false);
   const [isVideoActive, setIsVideoActive] = useState(false);
   const [lastToolCall, setLastToolCall] = useState<string | null>(null);
+  const [modeToast, setModeToast] = useState<{ type: 'success' | 'warning'; message: string } | null>(null);
   const modeCapabilities = getModeCapabilities(currentMode);
+  const isAudioActiveRef = useRef(false);
+  const isVideoActiveRef = useRef(false);
+  const currentModeRef = useRef<RobotMode>(currentMode);
+  const modeCapsRef = useRef(modeCapabilities);
 
   const [geminiService] = useState(() => {
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
@@ -28,9 +33,54 @@ const ControlModePage: React.FC<ControlModePageProps> = ({ onModeChange, isConne
   });
 
   useEffect(() => {
+    isAudioActiveRef.current = isAudioActive;
+  }, [isAudioActive]);
+  useEffect(() => {
+    isVideoActiveRef.current = isVideoActive;
+  }, [isVideoActive]);
+  useEffect(() => {
+    currentModeRef.current = currentMode;
+    modeCapsRef.current = modeCapabilities;
+  }, [currentMode, modeCapabilities]);
+
+  const onGeminiResponse = useCallback((response: any) => {
+    if (response.type === MultimodalLiveResponseType.AUDIO) {
+      setVoiceState('speaking');
+    } else if (response.type === MultimodalLiveResponseType.TURN_COMPLETE) {
+      setVoiceState('listening');
+    } else if (response.type === MultimodalLiveResponseType.INTERRUPTED) {
+      setVoiceState('listening');
+    } else if (response.type === MultimodalLiveResponseType.TOOL_CALL) {
+      setVoiceState('thinking');
+    }
+  }, []);
+
+  useEffect(() => {
     // Reconfigure mode (system prompt + tools) whenever mode changes
     geminiService.configureForMode(currentMode);
   }, [currentMode, geminiService]);
+
+  useEffect(() => {
+    // If the server closes the socket during a hot mode update, auto-recover
+    // without forcing the user to click Stop/Start again.
+    geminiService.setOnConnectionClosed(async () => {
+      if (!isAudioActiveRef.current) return;
+      try {
+        // Re-apply current mode then reconnect
+        geminiService.configureForMode(currentModeRef.current);
+        await geminiService.start(onGeminiResponse);
+        setVoiceState('listening');
+
+        if (modeCapsRef.current.allowVisionAnalysis && isVideoActiveRef.current) {
+          await geminiService.startVideo();
+        }
+      } catch (e) {
+        console.error('Auto-restart Gemini failed:', e);
+        setIsAudioActive(false);
+        setVoiceState('idle');
+      }
+    });
+  }, [geminiService, onGeminiResponse]);
 
   useEffect(() => {
     return () => {
@@ -59,17 +109,7 @@ const ControlModePage: React.FC<ControlModePageProps> = ({ onModeChange, isConne
       });
       
       try {
-        await geminiService.start((response: any) => {
-          if (response.type === MultimodalLiveResponseType.AUDIO) {
-            setVoiceState('speaking');
-          } else if (response.type === MultimodalLiveResponseType.TURN_COMPLETE) {
-            setVoiceState('listening');
-          } else if (response.type === MultimodalLiveResponseType.INTERRUPTED) {
-            setVoiceState('listening');
-          } else if (response.type === MultimodalLiveResponseType.TOOL_CALL) {
-            setVoiceState('thinking');
-          }
-        });
+        await geminiService.start(onGeminiResponse);
 
         if (modeCapabilities.allowVisionAnalysis && isVideoActive) {
           await geminiService.startVideo();
@@ -110,8 +150,20 @@ const ControlModePage: React.FC<ControlModePageProps> = ({ onModeChange, isConne
       saveModePreference();
       geminiService.configureForMode(newMode);
 
+      // UX feedback: confirm mode change immediately.
+      setModeToast({
+        type: 'success',
+        message: `✅ Mode changed: ${getModeCapabilities(newMode).label}`,
+      });
+      window.setTimeout(() => setModeToast(null), 2200);
+
       if (isConnected && onModeChange && !rosPublishSuccess) {
         console.warn(`Mode switched locally to ${newMode}, but ROS mode publish failed.`);
+        setModeToast({
+          type: 'warning',
+          message: `⚠️ Mode changed locally, but robot publish failed`,
+        });
+        window.setTimeout(() => setModeToast(null), 3200);
       }
     } catch (error) {
       console.error('Error changing mode:', error);
@@ -119,6 +171,11 @@ const ControlModePage: React.FC<ControlModePageProps> = ({ onModeChange, isConne
       setCurrentMode(newMode);
       saveModePreference();
       geminiService.configureForMode(newMode);
+      setModeToast({
+        type: 'success',
+        message: `✅ Mode changed: ${getModeCapabilities(newMode).label}`,
+      });
+      window.setTimeout(() => setModeToast(null), 2200);
     } finally {
       setIsChanging(false);
     }
@@ -144,6 +201,19 @@ const ControlModePage: React.FC<ControlModePageProps> = ({ onModeChange, isConne
           {isConnected ? '● Online' : '○ Offline Mode'}
         </div>
       </div>
+
+      {/* Mode toast */}
+      {modeToast && (
+        <div
+          className={`fixed top-20 right-6 z-[160] px-4 py-3 rounded-xl border shadow-2xl backdrop-blur ${
+            modeToast.type === 'success'
+              ? 'bg-emerald-900/25 border-emerald-500/25 text-emerald-200'
+              : 'bg-amber-900/25 border-amber-500/25 text-amber-200'
+          }`}
+        >
+          <p className="text-sm font-bold">{modeToast.message}</p>
+        </div>
+      )}
 
       <div className="relative z-10 flex-1 flex flex-col lg:flex-row gap-8 min-h-0">
         {/* Left Side: Audio Visualizer (The Main Experience) */}

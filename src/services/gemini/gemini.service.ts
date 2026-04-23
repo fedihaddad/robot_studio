@@ -24,6 +24,7 @@ export class GeminiService {
   private currentMode: RobotMode = 'GENERAL';
   private rosService: any = null;
   private onToolCallCallback: ((toolName: string, args: any) => void) | null = null;
+  private onConnectionClosedCallback: (() => void) | null = null;
 
   constructor(apiKey: string, model: string) {
     this.client = new GeminiLiveAPI(apiKey, model);
@@ -45,6 +46,14 @@ export class GeminiService {
    */
   public setOnToolCall(callback: (toolName: string, args: any) => void) {
     this.onToolCallCallback = callback;
+  }
+
+  /**
+   * Optional callback when the underlying websocket closes.
+   * Useful for UI to auto-recover without manual restart.
+   */
+  public setOnConnectionClosed(callback: () => void) {
+    this.onConnectionClosedCallback = callback;
   }
 
   /**
@@ -116,7 +125,9 @@ export class GeminiService {
 
     this.client.onClose = () => {
       console.log('❌ Gemini Connection Closed');
-      this.stop();
+      // Socket is already closed. Just clean up local resources and notify UI.
+      this.cleanupAfterClose();
+      this.onConnectionClosedCallback?.();
     };
 
     this.client.connect();
@@ -281,6 +292,25 @@ export class GeminiService {
     this.videoStreamer.stop();
     this.player.interrupt();
     this.client.disconnect();
+  }
+
+  private cleanupAfterClose() {
+    this.isStarted = false;
+    try {
+      this.streamer.stop();
+    } catch {
+      // best-effort
+    }
+    try {
+      this.videoStreamer.stop();
+    } catch {
+      // best-effort
+    }
+    try {
+      this.player.interrupt();
+    } catch {
+      // best-effort
+    }
   }
 
   /**

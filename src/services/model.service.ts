@@ -77,7 +77,8 @@ export class ModelService {
           .map(link => this.resolveMeshPath(link.geometry!.filename!));
         
         console.log(`🤖 [ModelService] Preloading ${meshUrls.length} STL meshes...`);
-        await STLLoader.preload(meshUrls);
+        // Limit concurrency and yield between batches to keep the intro animation smooth.
+        await STLLoader.preload(meshUrls, { concurrency: 3, yieldMs: 0 });
 
         // 4. Build Robot Scene
         this.builder = new URDFBuilder(this.urdf);

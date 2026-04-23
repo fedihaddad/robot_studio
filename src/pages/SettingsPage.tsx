@@ -1,11 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { AppConfig } from '../types';
+import React, { useMemo, useState, useEffect } from 'react';
+import { AppConfig, ROSState, RobotMode } from '../types';
+import { ROSService } from '../services/ros.service';
+import DiagnosticsPanel from '../components/shared/DiagnosticsPanel';
 
 interface SettingsPageProps {
   config: AppConfig;
   onConfigChange: (config: AppConfig) => void;
   onSave: () => void;
   onLoad: () => void;
+  rosState: ROSState;
+  rosService: ROSService | null;
+  currentMode: RobotMode;
+  aiNodeActive: boolean;
+  onReconnectROS?: () => void;
+  isReconnecting?: boolean;
 }
 
 const SettingsPage: React.FC<SettingsPageProps> = ({
@@ -13,9 +21,23 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   onConfigChange,
   onSave,
   onLoad,
+  rosState,
+  rosService,
+  currentMode,
+  aiNodeActive,
+  onReconnectROS,
+  isReconnecting = false,
 }) => {
   const [formData, setFormData] = useState(config);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [showDiagnostics, setShowDiagnostics] = useState<boolean>(true);
+  const [rosTest, setRosTest] = useState<
+    | { status: 'idle' }
+    | { status: 'testing' }
+    | { status: 'ok'; latencyMs: number; topicsCount: number }
+    | { status: 'fail'; error: string }
+  >({ status: 'idle' });
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setFormData(config);
@@ -26,6 +48,18 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     setFormData(newData);
     onConfigChange(newData);
   };
+
+  const normalizeRosUrl = (value: string): string => {
+    const raw = value.trim();
+    if (!raw) return raw;
+    if (raw.startsWith('ws://') || raw.startsWith('wss://')) return raw;
+    const hostPort = raw.replace(/^https?:\/\//, '');
+    const hasPort = /:\d+$/.test(hostPort);
+    if (hasPort) return `ws://${hostPort}`;
+    return `ws://${hostPort}:9090`;
+  };
+
+  const effectiveRosUrl = useMemo(() => normalizeRosUrl(formData.rosUrl), [formData.rosUrl]);
 
   const handleSave = () => {
     onSave();
@@ -48,6 +82,104 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
       setSaveMessage(`❌ ${label} connection failed. Check the URL and ensure the service is running.`);
     }
     setTimeout(() => setSaveMessage(null), 5000);
+  };
+
+  const testRosbridge = async () => {
+    const url = effectiveRosUrl;
+    setRosTest({ status: 'testing' });
+
+    const start = performance.now();
+    try {
+      if (!window.ROSLIB) {
+        throw new Error('ROSLIB not loaded in renderer');
+      }
+
+      const ros = new (window as any).ROSLIB.Ros({ url });
+      const result = await new Promise<{ topicsCount: number }>((resolve, reject) => {
+        const timeout = window.setTimeout(() => {
+          try {
+            ros.close();
+          } catch {
+            // ignore
+          }
+          reject(new Error('Timeout connecting to rosbridge'));
+        }, 3500);
+
+        ros.on('connection', () => {
+          ros.getTopics(
+            (topics: any) => {
+              window.clearTimeout(timeout);
+              try {
+                ros.close();
+              } catch {
+                // ignore
+              }
+              const count = Array.isArray(topics?.topics) ? topics.topics.length : 0;
+              resolve({ topicsCount: count });
+            },
+            (err: any) => {
+              window.clearTimeout(timeout);
+              try {
+                ros.close();
+              } catch {
+                // ignore
+              }
+              reject(new Error(typeof err === 'string' ? err : 'getTopics failed'));
+            }
+          );
+        });
+        ros.on('error', (err: any) => {
+          window.clearTimeout(timeout);
+          try {
+            ros.close();
+          } catch {
+            // ignore
+          }
+          reject(new Error(err?.message || 'WebSocket error'));
+        });
+      });
+
+      const latencyMs = Math.round(performance.now() - start);
+      setRosTest({ status: 'ok', latencyMs, topicsCount: result.topicsCount });
+      setSaveMessage(`✅ ROSBridge OK (${latencyMs}ms, topics: ${result.topicsCount})`);
+      setTimeout(() => setSaveMessage(null), 4000);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setRosTest({ status: 'fail', error: msg });
+      setSaveMessage(`❌ ROSBridge failed: ${msg}`);
+      setTimeout(() => setSaveMessage(null), 6000);
+    }
+  };
+
+  const copyConfig = async () => {
+    const payload = {
+      ...formData,
+      rosUrlNormalized: effectiveRosUrl,
+      rosConnected: rosState.isConnected,
+      currentMode,
+      aiNodeActive,
+      exportedAt: new Date().toISOString(),
+    };
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    } catch {
+      // ignore
+    }
+  };
+
+  const resetDefaults = () => {
+    const defaults: AppConfig = {
+      rosUrl: 'ws://10.151.21.13:9090',
+      cameraUrl: 'http://localhost:8080/?action=stream',
+      robotIp: '10.151.21.13',
+      robotName: 'AXEL',
+    };
+    setFormData(defaults);
+    onConfigChange(defaults);
+    setSaveMessage('Defaults restored (not saved yet)');
+    setTimeout(() => setSaveMessage(null), 3500);
   };
 
   const testConnection = async (url: string) => {
@@ -89,6 +221,32 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
       <div>
         <h1 className="text-4xl font-bold text-white mb-2">Settings</h1>
         <p className="text-gray-400">Configure AXEL robot connection parameters</p>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="axel-surface rounded-xl border border-slate-700/60 p-4 flex flex-wrap items-center gap-2">
+        <button onClick={testRosbridge} className="axel-button-primary px-4 py-2 rounded-xl text-sm font-bold">
+          {rosTest.status === 'testing' ? 'Testing ROSBridge…' : 'Test ROSBridge'}
+        </button>
+        <button
+          onClick={() => onReconnectROS?.()}
+          disabled={!onReconnectROS || isReconnecting}
+          className="axel-button-secondary px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50"
+        >
+          {isReconnecting ? 'Reconnecting…' : 'Reconnect ROS'}
+        </button>
+        <button onClick={copyConfig} className="axel-button-secondary px-4 py-2 rounded-xl text-sm font-bold">
+          {copied ? 'Copied' : 'Copy config'}
+        </button>
+        <button onClick={resetDefaults} className="axel-button-secondary px-4 py-2 rounded-xl text-sm font-bold">
+          Reset defaults
+        </button>
+
+        <div className="ml-auto text-xs axel-muted">
+          ROS: <span className={rosState.isConnected ? 'text-emerald-300' : 'text-rose-300'}>{rosState.isConnected ? 'Connected' : 'Disconnected'}</span>
+          <span className="mx-2 opacity-40">|</span>
+          Mode: <span className="text-cyan-200">{currentMode}</span>
+        </div>
       </div>
 
       {/* Save Message */}
@@ -158,6 +316,12 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                     type="text"
                     value={formData.rosUrl}
                     onChange={(e) => handleChange('rosUrl', e.target.value)}
+                    onBlur={() => {
+                      const normalized = normalizeRosUrl(formData.rosUrl);
+                      if (normalized !== formData.rosUrl) {
+                        handleChange('rosUrl', normalized);
+                      }
+                    }}
                     className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
                     placeholder="ws://192.168.1.100:9090"
                   />
@@ -168,6 +332,9 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                     🧪 Test
                   </button>
                 </div>
+                <p className="text-xs text-slate-400 mt-2">
+                  Normalized: <span className="font-mono text-slate-200">{effectiveRosUrl}</span>
+                </p>
                 <p className="text-xs text-gray-500 mt-1">
                   WebSocket URL for ROS2 bridge communication
                 </p>
@@ -240,16 +407,29 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
         </div>
       </div>
 
-      {/* Connection Guide */}
-      <div className="bg-blue-900 border border-blue-700 rounded-lg p-6 space-y-3">
-        <h3 className="text-lg font-bold text-blue-200">ℹ️ Connection Guide</h3>
-        <ul className="text-sm text-blue-100 space-y-2">
-          <li>✓ Ensure your robot is on and connected to the network</li>
-          <li>✓ ROS2 and rosbridge_suite must be running on the robot</li>
-          <li>✓ MJPEG-Streamer must be running on port 8080</li>
-          <li>✓ Use your robot's IP address (e.g., 192.168.x.x)</li>
-          <li>✓ Test connections to verify before saving</li>
-        </ul>
+      {/* Diagnostics (embedded) */}
+      <div className="axel-surface rounded-xl border border-slate-700/60 p-6 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-2xl font-bold text-white">🧪 Diagnostics</h2>
+            <p className="text-sm axel-muted">Logs & debug (useful for soutenance)</p>
+          </div>
+          <button
+            onClick={() => setShowDiagnostics((v) => !v)}
+            className="axel-button-secondary px-4 py-2 rounded-xl text-sm font-bold"
+          >
+            {showDiagnostics ? 'Hide' : 'Show'}
+          </button>
+        </div>
+
+        {showDiagnostics && (
+          <DiagnosticsPanel
+            rosState={rosState}
+            rosService={rosService}
+            currentMode={currentMode}
+            aiNodeActive={aiNodeActive}
+          />
+        )}
       </div>
     </div>
   );

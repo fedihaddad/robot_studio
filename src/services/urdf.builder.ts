@@ -67,8 +67,25 @@ export class STLLoader {
     STLLoader.loadingPromises.clear();
   }
 
-  static async preload(urls: string[]): Promise<void> {
-    await Promise.all(urls.map((url) => STLLoader.load(url).then(() => undefined)));
+  static async preload(
+    urls: string[],
+    options?: {
+      concurrency?: number;
+      yieldMs?: number;
+    }
+  ): Promise<void> {
+    const concurrency = Math.max(1, Math.min(10, options?.concurrency ?? 3));
+    const yieldMs = Math.max(0, Math.min(16, options?.yieldMs ?? 0));
+
+    for (let i = 0; i < urls.length; i += concurrency) {
+      const batch = urls.slice(i, i + concurrency);
+      // Load in small batches to avoid blocking the UI (STL parsing is CPU-heavy).
+      // eslint-disable-next-line no-await-in-loop
+      await Promise.all(batch.map((url) => STLLoader.load(url).then(() => undefined)));
+      // Yield so the renderer/UI can paint between batches.
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise<void>((r) => window.setTimeout(() => r(), yieldMs));
+    }
   }
 
   private static loadWithoutCache(url: string): Promise<THREE.BufferGeometry> {

@@ -171,6 +171,21 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
           robotScene = modelService.getRobotScene()!;
           scene.add(robotScene);
         } else {
+          // Prefer the global preloader to avoid duplicate heavy work (intro + app preload).
+          // If preload succeeds, reuse the cached scene/builder.
+          try {
+            setLoadingMessage('Preloading model...');
+            await modelService.preloadModel();
+          } catch {
+            // Fall back to local URDF loading below.
+          }
+
+          if (modelService.isModelReady()) {
+            setLoadingMessage('Using preloaded model...');
+            builder = modelService.getBuilder()!;
+            robotScene = modelService.getRobotScene()!;
+            scene.add(robotScene);
+          } else {
           setLoadingMessage('Loading URDF...');
           let urdfString: string;
           const loadLocalURDF = async (): Promise<string> => {
@@ -225,6 +240,7 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
           robotScene.rotation.x = -Math.PI / 2;
           robotScene.position.y = 0.3;
           scene.add(robotScene);
+          }
         }
 
         robotGroupRef.current = robotScene;
