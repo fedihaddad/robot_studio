@@ -39,6 +39,9 @@ const App: React.FC = () => {
   const lastRosConnectedRef = useRef<boolean>(false);
   const [dismissedRosBannerAt, setDismissedRosBannerAt] = useState<number>(0);
   const [isConnectionCenterOpen, setIsConnectionCenterOpen] = useState(false);
+  /** `undefined` = not driven by a ROS state topic; when set, mirrors `std_msgs/Bool` feedback. */
+  const [emergencyStopRemote, setEmergencyStopRemote] = useState<boolean | undefined>(undefined);
+  const emergencyStopUnsubRef = useRef<(() => void) | null>(null);
 
   const connectROS = useCallback(async () => {
     try {
@@ -80,8 +83,20 @@ const App: React.FC = () => {
         setAiNodeActive(true);
       });
 
+      emergencyStopUnsubRef.current?.();
+      emergencyStopUnsubRef.current = null;
+      setEmergencyStopRemote(undefined);
+      const esUnsub = service.subscribeToEmergencyStopState((active) => {
+        setEmergencyStopRemote(active);
+      });
+      if (esUnsub) {
+        emergencyStopUnsubRef.current = esUnsub;
+      }
+
       setIsLoadingTopics(false);
     } catch (error) {
+      emergencyStopUnsubRef.current = null;
+      setEmergencyStopRemote(undefined);
       setRosState({
         isConnected: false,
         rosUrl: config.rosUrl,
@@ -125,6 +140,12 @@ const App: React.FC = () => {
     // Run only once on mount to avoid reconnect/disconnect loops.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!rosState.isConnected) {
+      setEmergencyStopRemote(undefined);
+    }
+  }, [rosState.isConnected]);
 
   // Keep UI connection state synchronized with underlying ROS service status.
   useEffect(() => {
@@ -200,9 +221,7 @@ const App: React.FC = () => {
             rosState={rosState}
             cameraConnected={cameraConnected}
             onEmergencyStop={handleEmergencyStop}
-            onReconnectROS={handleReconnectROS}
-            isReconnecting={isReconnecting}
-            onModeChange={handleModeChange}
+            emergencyStopRemote={emergencyStopRemote}
           />
         );
       case 2:

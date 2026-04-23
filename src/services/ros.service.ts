@@ -375,12 +375,33 @@ export class ROSService {
     );
   }
 
+  private getEmergencyStopCommandTopic(): string {
+    return import.meta.env.VITE_EMERGENCY_STOP_TOPIC || '/emergency/stop';
+  }
+
+  /** When set, dashboard mirrors E-stop from this `std_msgs/Bool` topic (true = stopped). */
+  private getEmergencyStopStateTopic(): string | null {
+    const raw = import.meta.env.VITE_EMERGENCY_STOP_STATE_TOPIC as string | undefined;
+    return raw && String(raw).trim() ? String(raw).trim() : null;
+  }
+
   publishEmergencyStop(stop: boolean): void {
-    this.publish(
-      '/emergency/stop',
-      'std_msgs/Bool',
-      { data: stop }
-    );
+    this.publish(this.getEmergencyStopCommandTopic(), 'std_msgs/Bool', { data: stop });
+  }
+
+  /**
+   * Subscribe to robot-reported emergency stop (if `VITE_EMERGENCY_STOP_STATE_TOPIC` is set).
+   * Returns unsubscribe, or null if no state topic is configured.
+   */
+  subscribeToEmergencyStopState(callback: (active: boolean) => void): (() => void) | null {
+    const topic = this.getEmergencyStopStateTopic();
+    if (!topic) return null;
+
+    const handler = (msg: { data?: boolean }) => {
+      callback(!!msg?.data);
+    };
+    this.subscribe(topic, 'std_msgs/Bool', handler);
+    return () => this.unsubscribe(topic, handler);
   }
 
   subscribeToTopic(topic: string, messageType: string): Promise<any> {

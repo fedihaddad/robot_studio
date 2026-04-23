@@ -136,3 +136,160 @@ code {
   }
 }
 
+/* Startup intro: soft animated gradient + grid behind the 3D viewer */
+@keyframes axel-intro-blob-1 {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.85;
+  }
+  33% {
+    transform: translate3d(8vw, -6vh, 0) scale(1.12);
+    opacity: 1;
+  }
+  66% {
+    transform: translate3d(-6vw, 5vh, 0) scale(0.94);
+    opacity: 0.8;
+  }
+}
+
+@keyframes axel-intro-blob-2 {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translate3d(-10vw, 8vh, 0) scale(1.14);
+    opacity: 1;
+  }
+}
+
+@keyframes axel-intro-grid-shift {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(56px, 56px, 0);
+  }
+}
+
+@keyframes axel-intro-sweep {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.axel-intro-ambient {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background-color: #020617;
+  background-image: linear-gradient(
+    118deg,
+    #020617 0%,
+    #0c4a6e 28%,
+    #1e1b4b 55%,
+    #042f2e 78%,
+    #020617 100%
+  );
+  background-size: 320% 320%;
+  animation: axel-intro-sweep 22s ease-in-out infinite;
+}
+
+/* Parent carries transform animation; child carries blur (Chromium compositing fix). */
+.axel-intro-ambient__blob-track {
+  position: absolute;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.axel-intro-ambient__blob-track--a {
+  width: min(90vw, 760px);
+  height: min(90vw, 760px);
+  left: -18%;
+  top: -12%;
+  animation: axel-intro-blob-1 14s ease-in-out infinite;
+}
+
+.axel-intro-ambient__blob-track--b {
+  width: min(75vw, 600px);
+  height: min(75vw, 600px);
+  right: -14%;
+  bottom: -10%;
+  animation: axel-intro-blob-2 18s ease-in-out infinite;
+}
+
+.axel-intro-ambient__blob-track--c {
+  width: min(55vw, 440px);
+  height: min(55vw, 440px);
+  left: 32%;
+  bottom: 12%;
+  animation: axel-intro-blob-1 20s ease-in-out infinite reverse;
+}
+
+.axel-intro-ambient__blob-fill {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  filter: blur(72px);
+  transform: translateZ(0);
+}
+
+.axel-intro-ambient__blob-fill--a {
+  background: radial-gradient(circle, rgba(34, 211, 238, 0.42) 0%, transparent 68%);
+}
+
+.axel-intro-ambient__blob-fill--b {
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.4) 0%, transparent 66%);
+}
+
+.axel-intro-ambient__blob-fill--c {
+  background: radial-gradient(circle, rgba(57, 184, 164, 0.36) 0%, transparent 62%);
+}
+
+.axel-intro-ambient__grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.4;
+  background-image: linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
+  background-size: 56px 56px;
+  animation: axel-intro-grid-shift 24s linear infinite;
+  will-change: transform;
+  mask-image: radial-gradient(ellipse 88% 78% at 50% 42%, black 22%, transparent 72%);
+  -webkit-mask-image: radial-gradient(ellipse 88% 78% at 50% 42%, black 22%, transparent 72%);
+}
+
+.axel-intro-ambient__vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 35%, rgba(2, 6, 23, 0.65) 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .axel-intro-ambient {
+    animation: none;
+    background-position: 50% 50%;
+  }
+
+  .axel-intro-ambient__blob-track--a,
+  .axel-intro-ambient__blob-track--b,
+  .axel-intro-ambient__blob-track--c,
+  .axel-intro-ambient__grid {
+    animation: none;
+  }
+
+  .axel-intro-ambient__blob-fill {
+    opacity: 0.75;
+  }
+}
+

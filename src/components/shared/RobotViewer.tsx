@@ -60,6 +60,13 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
   const handHandlesRef = useRef<{ left?: THREE.Mesh; right?: THREE.Mesh }>({});
   const isDraggingHandleRef = useRef(false);
 
+  const onModelReadyRef = useRef(onModelReady);
+  const onErrorRef = useRef(onError);
+  const onServoCommandRef = useRef(onServoCommand);
+  onModelReadyRef.current = onModelReady;
+  onErrorRef.current = onError;
+  onServoCommandRef.current = onServoCommand;
+
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loadingMessage, setLoadingMessage] = useState('Initializing...');
@@ -86,7 +93,7 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
         const errorMessage = `Failed to initialize ROS: ${err instanceof Error ? err.message : String(err)}`;
         setError(errorMessage);
         setIsLoading(false);
-        onError?.(errorMessage);
+        onErrorRef.current?.(errorMessage);
         return;
       }
     }
@@ -99,8 +106,13 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
 
         // Scene setup
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x1a1a2e);
-        scene.fog = new THREE.Fog(0x1a1a2e, 50, 100);
+        if (isIntroMode) {
+          scene.background = null;
+          scene.fog = null;
+        } else {
+          scene.background = new THREE.Color(0x1a1a2e);
+          scene.fog = new THREE.Fog(0x1a1a2e, 50, 100);
+        }
         sceneRef.current = scene;
 
         // Camera setup - zoomed out to see entire robot
@@ -117,6 +129,11 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
 
         // Renderer setup
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        if (isIntroMode) {
+          renderer.setClearColor(0x000000, 0);
+        } else {
+          renderer.setClearColor(0x1a1a2e, 1);
+        }
         renderer.setSize(mountRef.current!.clientWidth, mountRef.current!.clientHeight);
         renderer.shadowMap.enabled = !isIntroMode;
         renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -246,7 +263,6 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
         robotGroupRef.current = robotScene;
         urdfBuilderRef.current = builder;
 
-        console.log('[RobotViewer] Robot added to scene at position:', robotScene.position);
         fitCameraToRobot(camera, robotScene, orbitTargetRef.current, 1.5);
         createOrUpdateHandHandles(scene, robotScene, handHandlesRef.current);
 
@@ -316,7 +332,7 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
               builder.updateJoint(jointName, radians);
             },
             sendServo: (id, angle) => {
-              onServoCommand?.({ id, angle });
+              onServoCommandRef.current?.({ id, angle });
             },
           });
           cleanupFns.push(handDragCleanup);
@@ -324,13 +340,13 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
 
         setIsLoading(false);
         setLoadingMessage('');
-        onModelReady?.();
+        onModelReadyRef.current?.();
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         console.error('[URDF Viewer] Error:', errorMessage);
         setError(errorMessage);
         setIsLoading(false);
-        onError?.(errorMessage);
+        onErrorRef.current?.(errorMessage);
       }
     };
 
@@ -346,11 +362,11 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
         rendererRef.current.dispose();
       }
     };
-  }, [isConnected, config.rosUrl, onError, onModelReady, onServoCommand, isIntroMode]);
+  }, [isConnected, config.rosUrl, isIntroMode]);
 
   // Update joint angles from ROS2 joint_states
   useEffect(() => {
-    if (!urdfBuilderRef.current || !jointMappingsRef.current) return;
+    if (isLoading || !urdfBuilderRef.current || !jointMappingsRef.current) return;
     latestJointsRef.current = joints;
     latestNamedJointsRef.current = jointStatesByName;
 
@@ -362,7 +378,7 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
         builder.updateJoint(jointName, angleRadians);
       }
     });
-  }, [joints, jointStatesByName]);
+  }, [joints, jointStatesByName, isLoading]);
 
   // Direct ROS joint streaming fallback:
   // apply /joint_states updates straight to URDF builder to avoid UI state race/staleness.
@@ -425,8 +441,12 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
     };
   }, [isLoading]);
 
+  const shellClass = isIntroMode
+    ? 'relative w-full h-full bg-transparent overflow-hidden'
+    : 'relative w-full h-full bg-gray-900 rounded-lg border border-gray-700 overflow-hidden';
+
   return (
-    <div className="relative w-full h-full bg-gray-900 rounded-lg border border-gray-700 overflow-hidden">
+    <div className={shellClass}>
       <div ref={mountRef} style={{ width: '100%', height: '100%' }} />
 
       {/* Loading Indicator */}

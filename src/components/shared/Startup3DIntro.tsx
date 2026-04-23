@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import RobotViewer from './RobotViewer';
 
 interface Startup3DIntroProps {
@@ -160,15 +160,24 @@ function buildIntroPose(elapsedMs: number): Record<string, number> {
 }
 
 const Startup3DIntro: React.FC<Startup3DIntroProps> = ({ onComplete }) => {
-  const [jointStatesByName, setJointStatesByName] = useState<Record<string, number>>({});
-  const [modelReady, setModelReady] = useState(false);
+  /** Full HOME pose while the mesh loads so URDF never applies an empty joint map. */
+  const [jointStatesByName, setJointStatesByName] = useState<Record<string, number>>(() => ({
+    ...HOME_POSE,
+  }));
+  /** When non-null, 3D model is ready; intro choreography time `t` runs from this stamp (not from mount). */
   const [modelReadyAt, setModelReadyAt] = useState<number | null>(null);
   const [showCenteredBrand, setShowCenteredBrand] = useState(false);
   const rafRef = useRef<number | null>(null);
-  const startTimeRef = useRef<number | null>(null);
   const lastPoseUpdateRef = useRef<number>(0);
   const hasShownBrandRef = useRef(false);
   const didCompleteRef = useRef(false);
+  const modelReadyHandledRef = useRef(false);
+
+  const handleModelReady = useCallback(() => {
+    if (modelReadyHandledRef.current) return;
+    modelReadyHandledRef.current = true;
+    setModelReadyAt(performance.now());
+  }, []);
 
   const completeIntro = () => {
     if (didCompleteRef.current) return;
@@ -182,25 +191,22 @@ const Startup3DIntro: React.FC<Startup3DIntroProps> = ({ onComplete }) => {
 
   useEffect(() => {
     const animate = (timestamp: number) => {
-      if (startTimeRef.current === null) {
-        startTimeRef.current = timestamp;
-      }
+      if (modelReadyAt !== null) {
+        const elapsedMs = timestamp - modelReadyAt;
+        if (timestamp - lastPoseUpdateRef.current >= 33) {
+          lastPoseUpdateRef.current = timestamp;
+          setJointStatesByName(buildIntroPose(elapsedMs));
+        }
 
-      const elapsedMs = timestamp - startTimeRef.current;
-      // Throttle pose updates to ~30 FPS to keep intro smooth.
-      if (timestamp - lastPoseUpdateRef.current >= 33) {
-        lastPoseUpdateRef.current = timestamp;
-        setJointStatesByName(buildIntroPose(elapsedMs));
-      }
+        if (!hasShownBrandRef.current && elapsedMs >= INTRO_DURATION_TOTAL_MS * 0.72) {
+          hasShownBrandRef.current = true;
+          setShowCenteredBrand(true);
+        }
 
-      if (!hasShownBrandRef.current && elapsedMs >= INTRO_DURATION_TOTAL_MS * 0.72) {
-        hasShownBrandRef.current = true;
-        setShowCenteredBrand(true);
-      }
-
-      if (modelReady && modelReadyAt !== null && timestamp - modelReadyAt >= INTRO_DURATION_TOTAL_MS) {
-        completeIntro();
-        return;
+        if (timestamp - modelReadyAt >= INTRO_DURATION_TOTAL_MS) {
+          completeIntro();
+          return;
+        }
       }
 
       rafRef.current = requestAnimationFrame(animate);
@@ -212,27 +218,35 @@ const Startup3DIntro: React.FC<Startup3DIntroProps> = ({ onComplete }) => {
         cancelAnimationFrame(rafRef.current);
       }
     };
-  }, [modelReady, modelReadyAt]);
+  }, [modelReadyAt]);
 
   useEffect(() => {
-    if (!modelReady || modelReadyAt !== null) return;
-    setModelReadyAt(performance.now());
-  }, [modelReady, modelReadyAt]);
-
-  useEffect(() => {
-    // Fail-open safeguard: only when model never becomes ready.
-    // Once ready, intro duration is controlled only by INTRO_DURATION_MS.
-    if (modelReady) return;
+    if (modelReadyAt !== null) return;
     const hardTimeout = window.setTimeout(() => {
       completeIntro();
     }, 25000);
 
     return () => window.clearTimeout(hardTimeout);
-  }, [modelReady]);
+  }, [modelReadyAt]);
 
   return (
-    <div className="fixed inset-0 z-[100] bg-gray-950/95 backdrop-blur-sm">
-      <div className="absolute inset-0">
+    <div className="fixed inset-0 z-[100] overflow-hidden bg-slate-950">
+      <div className="axel-intro-ambient" aria-hidden>
+        {/* Blur lives on child: animating transform on the same node as filter often does not repaint in Chromium. */}
+        <div className="axel-intro-ambient__blob-track axel-intro-ambient__blob-track--a">
+          <div className="axel-intro-ambient__blob-fill axel-intro-ambient__blob-fill--a" />
+        </div>
+        <div className="axel-intro-ambient__blob-track axel-intro-ambient__blob-track--b">
+          <div className="axel-intro-ambient__blob-fill axel-intro-ambient__blob-fill--b" />
+        </div>
+        <div className="axel-intro-ambient__blob-track axel-intro-ambient__blob-track--c">
+          <div className="axel-intro-ambient__blob-fill axel-intro-ambient__blob-fill--c" />
+        </div>
+        <div className="axel-intro-ambient__grid" />
+        <div className="axel-intro-ambient__vignette" />
+      </div>
+
+      <div className="absolute inset-0 z-10">
         <RobotViewer
           joints={{}}
           jointStatesByName={jointStatesByName}
@@ -242,20 +256,21 @@ const Startup3DIntro: React.FC<Startup3DIntroProps> = ({ onComplete }) => {
           showLoadingDetails={false}
           showControlsHint={false}
           isIntroMode={true}
-          onModelReady={() => setModelReady(true)}
+          onModelReady={handleModelReady}
         />
       </div>
 
       <button
+        type="button"
         onClick={completeIntro}
-        className="absolute top-8 right-8 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-white font-semibold transition-colors"
+        className="absolute top-8 right-8 z-30 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-white font-semibold transition-colors"
       >
         Skip Intro
       </button>
 
       <div
-        className={`pointer-events-none absolute inset-0 flex items-center justify-center transition-all duration-700 ${
-          modelReady && showCenteredBrand ? 'opacity-100 scale-100' : 'opacity-0 scale-90'
+        className={`pointer-events-none absolute inset-0 z-20 flex items-center justify-center transition-all duration-700 ${
+          modelReadyAt !== null && showCenteredBrand ? 'opacity-100 scale-100' : 'opacity-0 scale-90'
         }`}
       >
         <h1 className="text-6xl md:text-7xl font-black tracking-[0.2em] text-white drop-shadow-[0_0_30px_rgba(34,211,238,0.35)]">

@@ -1,4 +1,5 @@
 import React from 'react';
+import { StopCircleIcon, HandRaisedIcon } from '@heroicons/react/24/outline';
 
 interface EmergencyStopButtonProps {
   active: boolean;
@@ -13,10 +14,11 @@ const EmergencyStopButton: React.FC<EmergencyStopButtonProps> = ({
 }) => {
   return (
     <button
+      type="button"
       onClick={() => onToggle(!active)}
       disabled={disabled}
       className={`
-        w-full py-3 px-4 rounded-lg font-bold text-lg transition-all duration-200
+        min-w-[200px] py-3 px-4 rounded-lg font-bold text-base transition-all duration-200
         flex items-center justify-center gap-2
         ${
           active
@@ -26,8 +28,17 @@ const EmergencyStopButton: React.FC<EmergencyStopButtonProps> = ({
         ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
       `}
     >
-      <span className={`w-4 h-4 rounded-full ${active ? 'bg-red-400' : 'bg-gray-500'}`} />
-      {active ? '🛑 EMERGENCY STOP ACTIVE' : '⏸ Emergency Stop'}
+      {active ? (
+        <>
+          <StopCircleIcon className="w-6 h-6 shrink-0" aria-hidden />
+          <span>Emergency stop active</span>
+        </>
+      ) : (
+        <>
+          <HandRaisedIcon className="w-6 h-6 shrink-0" aria-hidden />
+          <span>Emergency stop</span>
+        </>
+      )}
     </button>
   );
 };
