@@ -260,6 +260,8 @@ const Startup3DIntro: React.FC<Startup3DIntroProps> = ({ onComplete }) => {
         />
       </div>
 
+      <div className="axel-intro-shadow z-[15]" aria-hidden />
+
       <button
         type="button"
         onClick={completeIntro}

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import ServoSlider from '../components/shared/ServoSlider';
 import IKControlPanel from '../components/shared/IKControlPanel';
-import TimeSyncIndicator from '../components/shared/TimeSyncIndicator';
 import { ServoCommand, ServoPreset, IKSolution } from '../types';
 
 interface ServoPageProps {
@@ -149,39 +148,38 @@ const ServoPage: React.FC<ServoPageProps> = ({ onServoCommand }) => {
   };
 
   return (
-    <div className="p-8 space-y-8">
+    <div className="p-6 md:p-8 space-y-8" style={{ background: 'var(--axel-bg)', color: 'var(--axel-text)' }}>
       {/* Header */}
       <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Servo Control</h1>
-          <p className="text-gray-400">Individual servo angle control and presets</p>
+          <h1 className="text-4xl font-extrabold axel-gradient-text mb-2">Servo Control</h1>
+          <p className="axel-muted">Individual servo angle control and presets</p>
         </div>
-        <TimeSyncIndicator showDetails={false} />
       </div>
 
       {/* Control Mode Toggle */}
-      <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-        <h3 className="text-sm font-semibold text-gray-300 mb-3">Control Mode</h3>
+      <div className="axel-surface rounded-2xl p-4 border" style={{ borderColor: 'var(--axel-border)' }}>
+        <h3 className="text-sm font-extrabold mb-3" style={{ color: 'var(--axel-text)' }}>Control Mode</h3>
         <div className="flex gap-2">
           <button
             onClick={() => setIkMode('direct')}
-            className={`flex-1 px-4 py-2 rounded font-medium transition-colors ${
+            className={`flex-1 px-4 py-2 rounded-xl font-bold transition-colors ${
               ikMode === 'direct'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                ? 'axel-button-primary text-white'
+                : 'axel-button-secondary'
             }`}
           >
-            🎚️ Direct Servo Control
+            Direct Servo Control
           </button>
           <button
             onClick={() => setIkMode('inverse_kinematics')}
-            className={`flex-1 px-4 py-2 rounded font-medium transition-colors ${
+            className={`flex-1 px-4 py-2 rounded-xl font-bold transition-colors ${
               ikMode === 'inverse_kinematics'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                ? 'axel-button-primary text-white'
+                : 'axel-button-secondary'
             }`}
           >
-            🎯 Inverse Kinematics
+            Inverse Kinematics
           </button>
         </div>
       </div>
@@ -193,10 +191,10 @@ const ServoPage: React.FC<ServoPageProps> = ({ onServoCommand }) => {
             <button
               key={key}
               onClick={() => applyPreset(preset)}
-              className="px-4 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold transition-colors text-white flex flex-col items-center gap-1"
+              className="axel-button-primary px-4 py-3 rounded-2xl font-extrabold transition-colors text-white flex flex-col items-center gap-1"
             >
               <span className="text-lg">{preset.name}</span>
-              <span className="text-xs text-blue-200">{preset.description}</span>
+              <span className="text-xs opacity-85">{preset.description}</span>
             </button>
           ))}
         </div>
@@ -207,9 +205,8 @@ const ServoPage: React.FC<ServoPageProps> = ({ onServoCommand }) => {
           {/* Head Servos */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <span className="text-2xl">🗣️</span>
-              <h2 className="text-2xl font-bold text-white">Head Servos</h2>
-              <span className="text-sm text-gray-400">(15 servos)</span>
+              <h2 className="text-2xl font-extrabold" style={{ color: 'var(--axel-text)' }}>Head Servos</h2>
+              <span className="text-sm axel-muted">(15 servos)</span>
             </div>
 
             <div className="grid grid-cols-3 gap-3">
@@ -228,15 +225,14 @@ const ServoPage: React.FC<ServoPageProps> = ({ onServoCommand }) => {
           {/* Arm Servos - Direct */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <span className="text-2xl">🦾</span>
-              <h2 className="text-2xl font-bold text-white">Arm Servos</h2>
-              <span className="text-sm text-gray-400">(10 servos)</span>
+              <h2 className="text-2xl font-extrabold" style={{ color: 'var(--axel-text)' }}>Arm Servos</h2>
+              <span className="text-sm axel-muted">(10 servos)</span>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               {/* Left Arm */}
               <div>
-                <h3 className="text-sm font-bold text-blue-400 mb-2">Left Arm</h3>
+                <h3 className="text-sm font-extrabold mb-2 text-cyan-600 dark:text-cyan-300">Left Arm</h3>
                 <div className="space-y-2">
                   {Array.from({ length: 5 }, (_, i) => 16 + i).map((id) => (
                     <ServoSlider
@@ -252,7 +248,7 @@ const ServoPage: React.FC<ServoPageProps> = ({ onServoCommand }) => {
 
               {/* Right Arm */}
               <div>
-                <h3 className="text-sm font-bold text-green-400 mb-2">Right Arm</h3>
+                <h3 className="text-sm font-extrabold mb-2 text-emerald-600 dark:text-emerald-300">Right Arm</h3>
                 <div className="space-y-2">
                   {Array.from({ length: 5 }, (_, i) => 21 + i).map((id) => (
                     <ServoSlider
@@ -289,20 +285,20 @@ const ServoPage: React.FC<ServoPageProps> = ({ onServoCommand }) => {
       )}
 
       {/* Quick Info */}
-      <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-        <h3 className="text-lg font-bold text-white mb-3">Servo Information</h3>
+      <div className="axel-surface rounded-2xl p-6 border" style={{ borderColor: 'var(--axel-border)' }}>
+        <h3 className="text-lg font-extrabold mb-3" style={{ color: 'var(--axel-text)' }}>Servo Information</h3>
         <div className="grid grid-cols-3 gap-4 text-sm">
           <div>
-            <p className="text-gray-400">Head Servos</p>
-            <p className="text-xl font-bold text-blue-400">15x MG90/MG90S</p>
+            <p className="axel-muted">Head Servos</p>
+            <p className="text-xl font-extrabold text-cyan-600 dark:text-cyan-300">15x MG90/MG90S</p>
           </div>
           <div>
-            <p className="text-gray-400">Arm Servos</p>
-            <p className="text-xl font-bold text-green-400">10x MG996R</p>
+            <p className="axel-muted">Arm Servos</p>
+            <p className="text-xl font-extrabold text-emerald-600 dark:text-emerald-300">10x MG996R</p>
           </div>
           <div>
-            <p className="text-gray-400">Control Interface</p>
-            <p className="text-xl font-bold text-yellow-400">2x PCA9685</p>
+            <p className="axel-muted">Control Interface</p>
+            <p className="text-xl font-extrabold text-amber-600 dark:text-amber-300">2x PCA9685</p>
           </div>
         </div>
       </div>

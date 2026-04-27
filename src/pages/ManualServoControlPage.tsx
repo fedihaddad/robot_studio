@@ -88,6 +88,7 @@ const ManualServoControlPage: React.FC<ManualServoControlPageProps> = ({
     new Set(servoGroups.map(g => g.name))
   );
   const [selectedPreset, setSelectedPreset] = useState<string>('neutral');
+  const [localAngles, setLocalAngles] = useState<Record<number, number>>({});
 
   const {
     servoStates,
@@ -98,9 +99,13 @@ const ManualServoControlPage: React.FC<ManualServoControlPageProps> = ({
     enabled: true,
   });
 
-  const handleServoChange = (servoId: number, angle: number) => {
-    const command: ServoCommand = { id: servoId, angle };
-    sendCommand(command);
+  const handleServoChange = (servoId: number, angle: number, opts?: { publish?: boolean }) => {
+    setLocalAngles((prev) => ({ ...prev, [servoId]: angle }));
+    const shouldPublish = opts?.publish ?? true;
+    if (shouldPublish && isConnected) {
+      const command: ServoCommand = { id: servoId, angle };
+      sendCommand(command);
+    }
   };
 
   const toggleGroup = (groupName: string) => {
@@ -134,40 +139,41 @@ const ManualServoControlPage: React.FC<ManualServoControlPageProps> = ({
       });
     } else if (preset === 'smile') {
       // Smile preset
-      handleServoChange(9, 45);  // Left eyebrow up
-      handleServoChange(10, 45); // Right eyebrow up
-      handleServoChange(11, 120); // Jaw open
-      handleServoChange(13, 60); // Cheeks up (smile)
+      handleServoChange(10, 45); // Left eyebrow up
+      handleServoChange(11, 45); // Right eyebrow up
+      handleServoChange(13, 60); // Cheeks up
+      handleServoChange(9, 95);  // Mouth slight open
     } else if (preset === 'sad') {
       // Sad preset
-      handleServoChange(9, 135);  // Left eyebrow down
-      handleServoChange(10, 135); // Right eyebrow down
-      handleServoChange(11, 60);  // Jaw close
+      handleServoChange(10, 135); // Left eyebrow down
+      handleServoChange(11, 135); // Right eyebrow down
       handleServoChange(13, 120); // Cheeks down
+      handleServoChange(9, 80);   // Mouth closed
     } else if (preset === 'surprised') {
       // Surprised preset
       handleServoChange(1, 30);   // Left eye wide open
       handleServoChange(5, 30);   // Right eye wide open
-      handleServoChange(9, 30);   // Left eyebrow up
-      handleServoChange(10, 30);  // Right eyebrow up
-      handleServoChange(11, 120); // Jaw open
+      handleServoChange(10, 30);  // Left eyebrow up
+      handleServoChange(11, 30);  // Right eyebrow up
+      handleServoChange(9, 120);  // Mouth open
     } else if (preset === 'angry') {
       // Angry preset
       handleServoChange(1, 150);  // Left eye narrow
       handleServoChange(5, 150);  // Right eye narrow
-      handleServoChange(9, 135);  // Left eyebrow down
-      handleServoChange(10, 135); // Right eyebrow down
+      handleServoChange(10, 135); // Left eyebrow down
+      handleServoChange(11, 135); // Right eyebrow down
       handleServoChange(13, 140); // Cheeks tense
+      handleServoChange(9, 85);   // Mouth closed
     }
   };
 
   return (
-    <div className="p-8 space-y-8">
+    <div className="p-6 md:p-8 space-y-8" style={{ background: 'var(--axel-bg)', color: 'var(--axel-text)' }}>
       {/* Header */}
       <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-4xl font-bold text-white mb-2">🎮 Manual Servo Control</h1>
-          <p className="text-gray-400">
+          <h1 className="text-4xl font-extrabold mb-2 axel-gradient-text">Manual Servo Control</h1>
+          <p className="axel-muted">
             Control each facial servo individually
           </p>
         </div>
@@ -182,33 +188,22 @@ const ManualServoControlPage: React.FC<ManualServoControlPageProps> = ({
                 });
               });
             }}
-            className="px-4 py-2 bg-orange-900 hover:bg-orange-800 text-orange-300 rounded-lg font-semibold transition-colors"
+            className="axel-button-secondary px-4 py-2 rounded-xl font-semibold transition-colors"
             title="Reset ALL servos to center position"
           >
-            🔄 Reset All
+            Reset All
           </button>
-          <div className={`px-4 py-2 rounded-lg font-semibold ${
-            isConnected 
-              ? 'bg-green-900 text-green-300' 
-              : 'bg-red-900 text-red-300'
-          }`}>
-            {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
-          </div>
         </div>
       </div>
 
       {/* Connection Warning */}
       {!isConnected && (
-        <div className="bg-yellow-900 border border-yellow-700 rounded-lg p-4">
-          <p className="text-yellow-200">
-            ⚠️ ROS2 Bridge not connected. Make sure rosbridge is running on your Raspberry Pi.
-          </p>
-        </div>
+        <div />
       )}
 
       {/* Presets */}
-      <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-        <h2 className="text-lg font-bold text-white mb-4">😊 Quick Presets</h2>
+      <div className="axel-surface rounded-2xl p-6 border" style={{ borderColor: 'var(--axel-border)' }}>
+        <h2 className="text-lg font-extrabold mb-4" style={{ color: 'var(--axel-text)' }}>Quick Presets</h2>
         <div className="grid grid-cols-5 gap-3">
           {[
             { id: 'neutral', label: '😐 Neutral', emoji: '😐' },
@@ -222,8 +217,8 @@ const ManualServoControlPage: React.FC<ManualServoControlPageProps> = ({
               onClick={() => applyPreset(preset.id)}
               className={`px-4 py-3 rounded-lg font-semibold transition-all ${
                 selectedPreset === preset.id
-                  ? 'bg-blue-600 text-white border-2 border-blue-400'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600 border-2 border-transparent'
+                  ? 'axel-button-primary text-white border-2 border-cyan-500/40'
+                  : 'axel-button-secondary border-2 border-transparent'
               }`}
             >
               <div className="text-xl mb-1">{preset.emoji}</div>
@@ -236,16 +231,16 @@ const ManualServoControlPage: React.FC<ManualServoControlPageProps> = ({
       {/* Servo Groups */}
       <div className="space-y-4">
         {servoGroups.map((group) => (
-          <div key={group.name} className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+          <div key={group.name} className="axel-surface rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--axel-border)' }}>
             {/* Group Header */}
-            <div className="px-6 py-4 flex items-center justify-between hover:bg-gray-750 transition-colors border-b border-gray-700">
+            <div className="px-6 py-4 flex items-center justify-between transition-colors border-b" style={{ borderColor: 'var(--axel-border)' }}>
               <button
                 onClick={() => toggleGroup(group.name)}
                 className="flex-1 flex items-center gap-3 cursor-pointer"
               >
                 <span className="text-2xl">{group.icon}</span>
-                <h3 className="text-lg font-bold text-white">{group.name}</h3>
-                <span className="text-sm text-gray-400">({group.servos.length} servos)</span>
+                <h3 className="text-lg font-extrabold" style={{ color: 'var(--axel-text)' }}>{group.name}</h3>
+                <span className="text-sm axel-muted">({group.servos.length} servos)</span>
                 <span className={`text-xl transition-transform ml-auto ${expandedGroups.has(group.name) ? 'rotate-180' : ''}`}>
                   ▼
                 </span>
@@ -257,16 +252,16 @@ const ManualServoControlPage: React.FC<ManualServoControlPageProps> = ({
                   e.stopPropagation();
                   resetGroup(group);
                 }}
-                className="ml-4 px-3 py-2 bg-green-900 hover:bg-green-800 text-green-300 rounded-lg text-sm font-semibold transition-colors whitespace-nowrap"
+                className="ml-4 px-3 py-2 axel-button-secondary rounded-xl text-sm font-semibold transition-colors whitespace-nowrap"
                 title={`Reset all servos in ${group.name} to center position`}
               >
-                🔄 Reset
+                Reset
               </button>
             </div>
 
             {/* Group Content */}
             {expandedGroups.has(group.name) && (
-              <div className="px-6 py-4 bg-gray-750 border-t border-gray-700">
+              <div className="px-6 py-4 border-t" style={{ borderColor: 'var(--axel-border)', background: 'var(--axel-surface-soft)' }}>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {group.servos.map((servo) => {
                     const config = getServoConfig(servo.id);
@@ -275,11 +270,14 @@ const ManualServoControlPage: React.FC<ManualServoControlPageProps> = ({
                         key={servo.id}
                         id={servo.id}
                         label={servo.label}
-                        value={servoStates[servo.id]?.angle || config.default}
+                        value={
+                          typeof localAngles[servo.id] === 'number'
+                            ? localAngles[servo.id]
+                            : (servoStates[servo.id]?.angle ?? config.default)
+                        }
                         min={config.min}
                         max={config.max}
                         onChange={(value) => handleServoChange(servo.id, value)}
-                        disabled={!isConnected}
                       />
                     );
                   })}
@@ -291,9 +289,9 @@ const ManualServoControlPage: React.FC<ManualServoControlPageProps> = ({
       </div>
 
       {/* Instructions */}
-      <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-        <h3 className="text-lg font-bold text-white mb-3">📖 Instructions</h3>
-        <ul className="space-y-2 text-gray-300 text-sm">
+      <div className="axel-surface rounded-2xl p-6 border" style={{ borderColor: 'var(--axel-border)' }}>
+        <h3 className="text-lg font-extrabold mb-3" style={{ color: 'var(--axel-text)' }}>Instructions</h3>
+        <ul className="space-y-2 text-sm" style={{ color: 'var(--axel-text)' }}>
           <li>✓ Click on a group to expand/collapse servo controls</li>
           <li>✓ Use presets for quick facial expressions</li>
           <li>✓ Drag sliders to adjust individual servo angles</li>
@@ -302,13 +300,7 @@ const ManualServoControlPage: React.FC<ManualServoControlPageProps> = ({
         </ul>
       </div>
 
-      {/* Note for Configuration */}
-      <div className="bg-blue-900 border border-blue-700 rounded-lg p-4">
-        <p className="text-blue-200 text-sm">
-          💡 <strong>Next Step:</strong> You'll provide the exact min/max degrees for each servo. 
-          The current ranges (0-180°) are placeholders and will be updated with your specific hardware configuration.
-        </p>
-      </div>
+      {/* Note for Configuration removed */}
     </div>
   );
 };

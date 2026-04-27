@@ -64,15 +64,15 @@ const IKControlPanel: React.FC<IKControlPanelProps> = ({
   };
 
   return (
-    <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-      <h3 className="text-lg font-semibold text-white mb-4">
-        {armName === 'left_arm' ? '🤖 Left Arm IK Control' : '🤖 Right Arm IK Control'}
+    <div className="axel-surface rounded-2xl p-6 border" style={{ borderColor: 'var(--axel-border)', color: 'var(--axel-text)' }}>
+      <h3 className="text-lg font-extrabold mb-4" style={{ color: 'var(--axel-text)' }}>
+        {armName === 'left_arm' ? 'Left Arm IK Control' : 'Right Arm IK Control'}
       </h3>
 
       {/* Target Position Input */}
       <div className="space-y-3 mb-6">
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
+          <label className="block text-sm font-semibold mb-2" style={{ color: 'var(--axel-text)' }}>
             X Position: {target.x.toFixed(1)} mm
           </label>
           <input
@@ -83,12 +83,13 @@ const IKControlPanel: React.FC<IKControlPanelProps> = ({
             value={target.x}
             onChange={(e) => handleTargetChange('x', Number(e.target.value))}
             disabled={isExecuting}
-            className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50"
+            className="w-full h-2 rounded-lg appearance-none cursor-pointer disabled:opacity-50 accent-cyan-500"
+            style={{ background: 'rgba(148, 163, 184, 0.25)' }}
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
+          <label className="block text-sm font-semibold mb-2" style={{ color: 'var(--axel-text)' }}>
             Y Position: {target.y.toFixed(1)} mm
           </label>
           <input
@@ -99,12 +100,13 @@ const IKControlPanel: React.FC<IKControlPanelProps> = ({
             value={target.y}
             onChange={(e) => handleTargetChange('y', Number(e.target.value))}
             disabled={isExecuting}
-            className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50"
+            className="w-full h-2 rounded-lg appearance-none cursor-pointer disabled:opacity-50 accent-cyan-500"
+            style={{ background: 'rgba(148, 163, 184, 0.25)' }}
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
+          <label className="block text-sm font-semibold mb-2" style={{ color: 'var(--axel-text)' }}>
             Z Position: {target.z.toFixed(1)} mm
           </label>
           <input
@@ -115,37 +117,44 @@ const IKControlPanel: React.FC<IKControlPanelProps> = ({
             value={target.z}
             onChange={(e) => handleTargetChange('z', Number(e.target.value))}
             disabled={isExecuting}
-            className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50"
+            className="w-full h-2 rounded-lg appearance-none cursor-pointer disabled:opacity-50 accent-cyan-500"
+            style={{ background: 'rgba(148, 163, 184, 0.25)' }}
           />
         </div>
       </div>
 
       {/* Position Display */}
-      <div className="bg-gray-700 rounded p-3 mb-6 text-sm font-mono text-gray-300">
+      <div className="rounded-2xl p-4 mb-6 text-sm font-mono border" style={{ background: 'var(--axel-surface-soft)', borderColor: 'var(--axel-border)' }}>
         <div>Target: ({target.x.toFixed(0)}, {target.y.toFixed(0)}, {target.z.toFixed(0)}) mm</div>
-        <div className="text-xs text-gray-500 mt-1">Cartesian coordinates</div>
+        <div className="text-xs axel-muted mt-1">Cartesian coordinates</div>
       </div>
 
       {/* IK Solution Status */}
       {solution && (
-        <div className={`rounded p-4 mb-6 ${solution.valid ? 'bg-green-900/30 border border-green-700' : 'bg-red-900/30 border border-red-700'}`}>
+        <div
+          className="rounded-2xl p-4 mb-6 border"
+          style={{
+            background: solution.valid ? 'rgba(16, 185, 129, 0.08)' : 'rgba(244, 63, 94, 0.08)',
+            borderColor: solution.valid ? 'rgba(16, 185, 129, 0.22)' : 'rgba(244, 63, 94, 0.22)',
+          }}
+        >
           <div className="flex items-center gap-2 mb-2">
-            <span className={`text-lg ${solution.valid ? 'text-green-400' : 'text-red-400'}`}>
-              {solution.valid ? '✓' : '✗'}
+            <span className={`text-lg ${solution.valid ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300'}`}>
+              {solution.valid ? '✓' : '✕'}
             </span>
-            <span className={`font-semibold ${solution.valid ? 'text-green-400' : 'text-red-400'}`}>
+            <span className={`font-extrabold ${solution.valid ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300'}`}>
               {solution.valid ? 'Reachable' : 'Unreachable'}
             </span>
           </div>
 
           {solution.valid ? (
-            <div className="text-sm text-green-300 space-y-1">
+            <div className="text-sm space-y-1" style={{ color: 'var(--axel-text)' }}>
               <div>Shoulder: {solution.angles.shoulder.toFixed(1)}°</div>
               <div>Elbow: {solution.angles.elbow.toFixed(1)}°</div>
               {solution.angles.wrist && <div>Wrist: {solution.angles.wrist.toFixed(1)}°</div>}
             </div>
           ) : (
-            <div className="text-sm text-red-300">{solution.error}</div>
+            <div className="text-sm" style={{ color: 'var(--axel-text)' }}>{solution.error}</div>
           )}
         </div>
       )}
@@ -155,30 +164,30 @@ const IKControlPanel: React.FC<IKControlPanelProps> = ({
         <button
           onClick={() => handlePreset('home')}
           disabled={isExecuting}
-          className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm transition-colors disabled:opacity-50"
+          className="axel-button-secondary px-3 py-2 rounded-xl text-sm font-bold transition-colors disabled:opacity-50"
         >
-          🏠 Home
+          Home
         </button>
         <button
           onClick={() => handlePreset('reach_forward')}
           disabled={isExecuting}
-          className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm transition-colors disabled:opacity-50"
+          className="axel-button-secondary px-3 py-2 rounded-xl text-sm font-bold transition-colors disabled:opacity-50"
         >
-          → Forward
+          Forward
         </button>
         <button
           onClick={() => handlePreset('reach_up')}
           disabled={isExecuting}
-          className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm transition-colors disabled:opacity-50"
+          className="axel-button-secondary px-3 py-2 rounded-xl text-sm font-bold transition-colors disabled:opacity-50"
         >
-          ↑ Reach Up
+          Reach Up
         </button>
         <button
           onClick={() => handlePreset('reach_side')}
           disabled={isExecuting}
-          className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm transition-colors disabled:opacity-50"
+          className="axel-button-secondary px-3 py-2 rounded-xl text-sm font-bold transition-colors disabled:opacity-50"
         >
-          ↔ Side Reach
+          Side Reach
         </button>
       </div>
 
@@ -186,12 +195,12 @@ const IKControlPanel: React.FC<IKControlPanelProps> = ({
       <button
         onClick={handleExecute}
         disabled={!solution?.valid || isExecuting}
-        className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:opacity-50 rounded font-semibold transition-colors"
+        className="w-full px-4 py-3 axel-button-primary text-white disabled:opacity-50 rounded-xl font-extrabold transition-colors"
       >
-        {isExecuting ? '⏳ Executing...' : '▶ Execute IK Solution'}
+        {isExecuting ? 'Executing…' : 'Execute IK Solution'}
       </button>
 
-      <p className="text-xs text-gray-500 mt-3">
+      <p className="text-xs axel-muted mt-3">
         Drag sliders to set target position. System calculates joint angles automatically.
       </p>
     </div>

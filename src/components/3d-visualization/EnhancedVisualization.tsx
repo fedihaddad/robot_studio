@@ -181,6 +181,18 @@ const EnhancedVisualization: React.FC<EnhancedVisualizationProps> = ({
           builder = modelService.getBuilder()!;
           robotScene = modelService.getRobotScene()!;
           
+          // Ensure stand/support visuals are visible in the 3D page even if a previous
+          // intro view hid them on the cached scene.
+          const setLinkVisualMeshesVisible = (linkName: string, visible: boolean) => {
+            const linkGroup = robotScene.getObjectByName(linkName);
+            if (!linkGroup) return;
+            linkGroup.children.forEach((child: any) => {
+              if (child?.isMesh) child.visible = visible;
+            });
+          };
+          setLinkVisualMeshesVisible('base_link', true);
+          setLinkVisualMeshesVisible('pedestal_link', true);
+
           // Re-add to current scene (it will be removed from any previous parent)
           scene.add(robotScene);
         } else {

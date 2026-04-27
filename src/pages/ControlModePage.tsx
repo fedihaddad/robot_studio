@@ -182,21 +182,16 @@ const ControlModePage: React.FC<ControlModePageProps> = ({ onModeChange, isConne
   };
 
   return (
-    <div className="p-8 h-full flex flex-col bg-[#020617] text-white overflow-hidden relative">
-      {/* Background Ambient Glows */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-blue-600/10 blur-[120px]" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-purple-600/10 blur-[120px]" />
+    <div className="p-6 md:p-8 h-full flex flex-col overflow-hidden relative" style={{ background: 'var(--axel-bg)', color: 'var(--axel-text)' }}>
 
       {/* Top Header */}
       <div className="relative z-10 flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-4xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-300 drop-shadow-md">
-            Live Axel
-          </h1>
-          <p className="text-slate-400 font-medium">Voice-activated robot control & operational modes</p>
+          <h1 className="text-4xl font-extrabold axel-gradient-text drop-shadow-sm">Live Axel</h1>
+          <p className="axel-muted font-medium">Voice-activated robot control & operational modes</p>
         </div>
         <div className={`px-4 py-2 rounded-xl font-bold border backdrop-blur-md ${
-          isConnected ? 'bg-green-500/10 text-green-300 border-green-500/20' : 'bg-rose-500/10 text-rose-300 border-rose-500/20'
+          isConnected ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border-emerald-500/20' : 'bg-rose-500/10 text-rose-600 dark:text-rose-300 border-rose-500/20'
         }`}>
           {isConnected ? '● Online' : '○ Offline Mode'}
         </div>
@@ -217,10 +212,13 @@ const ControlModePage: React.FC<ControlModePageProps> = ({ onModeChange, isConne
 
       <div className="relative z-10 flex-1 flex flex-col lg:flex-row gap-8 min-h-0">
         {/* Left Side: Audio Visualizer (The Main Experience) */}
-        <div className="flex-[1.5] flex flex-col items-center justify-center glass-card rounded-3xl p-10 relative overflow-hidden">
+        <div
+          className="flex-[1.5] flex flex-col items-center justify-center glass-card rounded-3xl p-10 relative overflow-hidden"
+          style={{ color: 'var(--axel-text)' }}
+        >
           <div className="absolute top-6 left-6 flex items-center gap-2">
-             <div className={`w-2 h-2 rounded-full ${isAudioActive ? 'bg-cyan-500 animate-pulse' : 'bg-slate-600'}`}></div>
-             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+             <div className={`w-2 h-2 rounded-full ${isAudioActive ? 'bg-cyan-500 animate-pulse' : 'bg-slate-400'}`}></div>
+             <span className="text-[10px] font-bold axel-muted uppercase tracking-widest">
                {voiceState === 'idle' ? 'Ready to listen' : `System: ${voiceState.toUpperCase()}`}
              </span>
           </div>
@@ -228,7 +226,7 @@ const ControlModePage: React.FC<ControlModePageProps> = ({ onModeChange, isConne
           <AudioVisualizer state={voiceState} isActive={isAudioActive} />
 
           <div className="mt-8 text-center max-w-md">
-            <h2 className="text-3xl font-bold text-white mb-2 tracking-tight">
+            <h2 className="text-3xl font-extrabold mb-2 tracking-tight" style={{ color: 'var(--axel-text)' }}>
               {voiceState === 'idle' && "AXEL is standby"}
               {voiceState === 'listening' && "AXEL is listening..."}
               {voiceState === 'thinking' && "AXEL is processing..."}
@@ -292,17 +290,20 @@ const ControlModePage: React.FC<ControlModePageProps> = ({ onModeChange, isConne
         {/* Right Side: Mode Details & Selection */}
         <div className="flex-1 flex flex-col gap-6 overflow-y-auto pr-2 custom-scrollbar">
           {/* Active Mode Card */}
-          <div className={`rounded-3xl border-2 p-6 transition-all duration-500 relative overflow-hidden ${modeCapabilities.borderColor} ${modeCapabilities.bgColor}`}>
+          <div
+            className="rounded-3xl border p-6 transition-all duration-500 relative overflow-hidden axel-surface"
+            style={{ borderColor: 'var(--axel-border)' }}
+          >
              <div className="absolute top-4 right-4 opacity-10">
                <ModeIcon iconName={modeCapabilities.icon} className="w-24 h-24" />
              </div>
              <div className="relative z-10">
-               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">Active Configuration</span>
+               <span className="text-[10px] font-bold axel-muted uppercase tracking-widest mb-2 block">Active Configuration</span>
                <div className="flex items-center gap-3 mb-3">
-                 <ModeIcon iconName={modeCapabilities.icon} className={`w-10 h-10 ${modeCapabilities.color}`} />
-                 <h3 className={`text-2xl font-bold ${modeCapabilities.color}`}>{modeCapabilities.label}</h3>
+                 <ModeIcon iconName={modeCapabilities.icon} className="w-10 h-10 text-cyan-600 dark:text-cyan-300" />
+                 <h3 className="text-2xl font-extrabold text-cyan-600 dark:text-cyan-300">{modeCapabilities.label}</h3>
                </div>
-               <p className="text-sm text-slate-300 leading-relaxed">
+               <p className="text-sm leading-relaxed axel-muted">
                  {modeCapabilities.description}
                </p>
              </div>
@@ -310,7 +311,7 @@ const ControlModePage: React.FC<ControlModePageProps> = ({ onModeChange, isConne
 
           {/* Mode Selection List */}
           <div className="space-y-3">
-            <h4 className="text-sm font-bold text-slate-400 uppercase tracking-widest pl-2">Available Modes</h4>
+            <h4 className="text-sm font-bold axel-muted uppercase tracking-widest pl-2">Available Modes</h4>
             {Object.values(ROBOT_MODES).map((mode) => {
               const isActive = mode.mode === currentMode;
               return (
@@ -319,16 +320,17 @@ const ControlModePage: React.FC<ControlModePageProps> = ({ onModeChange, isConne
                   onClick={() => handleModeChange(mode.mode as RobotMode)}
                   disabled={isChanging || isActive}
                   className={`w-full group glass-card rounded-2xl p-4 flex items-center justify-between transition-all hover:scale-[1.02] ${
-                    isActive ? 'ring-2 ring-cyan-500/50 bg-cyan-500/5 border-cyan-500/30' : 'hover:bg-white/10'
+                    isActive ? 'ring-2 ring-cyan-500/35' : ''
                   }`}
+                  style={{ color: 'var(--axel-text)' }}
                 >
                   <div className="flex items-center gap-4 text-left">
-                    <div className={`p-2.5 rounded-xl ${isActive ? 'bg-cyan-500/20' : 'bg-slate-800'}`}>
-                       <ModeIcon iconName={mode.icon} className={`w-6 h-6 ${isActive ? 'text-cyan-400' : 'text-slate-400'}`} />
+                    <div className={`p-2.5 rounded-xl border`} style={{ background: 'var(--axel-surface-soft)', borderColor: 'var(--axel-border)' }}>
+                       <ModeIcon iconName={mode.icon} className={`w-6 h-6 ${isActive ? 'text-cyan-600 dark:text-cyan-300' : 'text-slate-400'}`} />
                     </div>
                     <div>
-                      <p className={`font-bold ${isActive ? 'text-white' : 'text-slate-300'}`}>{mode.label}</p>
-                      <p className="text-xs text-slate-500">{mode.description.substring(0, 40)}...</p>
+                      <p className={`font-extrabold ${isActive ? 'text-[color:var(--axel-text)]' : 'text-[color:var(--axel-text)]'}`}>{mode.label}</p>
+                      <p className="text-xs axel-muted">{mode.description.substring(0, 40)}...</p>
                     </div>
                   </div>
                   {isActive && <div className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]"></div>}

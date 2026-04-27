@@ -1,4 +1,19 @@
 import React, { useMemo, useState, useEffect } from 'react';
+import {
+  AdjustmentsHorizontalIcon,
+  ArrowPathIcon,
+  ArrowDownTrayIcon,
+  ArrowUpTrayIcon,
+  BeakerIcon,
+  ClipboardDocumentIcon,
+  Cog6ToothIcon,
+  ComputerDesktopIcon,
+  MoonIcon,
+  SignalIcon,
+  SunIcon,
+  VideoCameraIcon,
+  WrenchScrewdriverIcon,
+} from '@heroicons/react/24/solid';
 import { AppConfig, ROSState, RobotMode } from '../types';
 import { ROSService } from '../services/ros.service';
 import DiagnosticsPanel from '../components/shared/DiagnosticsPanel';
@@ -12,8 +27,8 @@ interface SettingsPageProps {
   rosService: ROSService | null;
   currentMode: RobotMode;
   aiNodeActive: boolean;
-  onReconnectROS?: () => void;
-  isReconnecting?: boolean;
+  theme: 'dark' | 'light';
+  onToggleTheme: () => void;
 }
 
 const SettingsPage: React.FC<SettingsPageProps> = ({
@@ -25,8 +40,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   rosService,
   currentMode,
   aiNodeActive,
-  onReconnectROS,
-  isReconnecting = false,
+  theme,
+  onToggleTheme,
 }) => {
   const [formData, setFormData] = useState(config);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -216,84 +231,117 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   };
 
   return (
-    <div className="p-8 space-y-8">
+    <div className="p-6 md:p-8 space-y-8">
       {/* Header */}
-      <div>
-        <h1 className="text-4xl font-bold text-white mb-2">Settings</h1>
-        <p className="text-gray-400">Configure AXEL robot connection parameters</p>
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-[var(--axel-surface-soft)] border border-[color:var(--axel-border)] flex items-center justify-center">
+              <Cog6ToothIcon className="w-6 h-6 text-cyan-200" aria-hidden />
+            </div>
+            <div>
+              <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-[color:var(--axel-text)]">Settings</h1>
+              <p className="text-sm md:text-base axel-muted mt-1">Connection parameters and diagnostics</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="axel-surface rounded-2xl border border-slate-700/60 px-4 py-3 flex items-center gap-3 text-xs">
+          <div className="flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full ${rosState.isConnected ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+            <span className="axel-muted">ROS</span>
+            <span className={rosState.isConnected ? 'text-emerald-200' : 'text-rose-200'}>
+              {rosState.isConnected ? 'Connected' : 'Disconnected'}
+            </span>
+          </div>
+          <span className="opacity-30">|</span>
+          <div className="flex items-center gap-2">
+            <AdjustmentsHorizontalIcon className="w-4 h-4 text-slate-300" aria-hidden />
+            <span className="axel-muted">Mode</span>
+            <span className="text-cyan-200 font-semibold">{currentMode}</span>
+          </div>
+        </div>
       </div>
 
       {/* Quick Actions */}
-      <div className="axel-surface rounded-xl border border-slate-700/60 p-4 flex flex-wrap items-center gap-2">
-        <button onClick={testRosbridge} className="axel-button-primary px-4 py-2 rounded-xl text-sm font-bold">
+      <div className="axel-surface rounded-2xl border border-slate-700/60 p-4 flex flex-wrap items-center gap-2">
+        <button onClick={testRosbridge} className="axel-button-primary px-4 py-2 rounded-xl text-sm font-bold inline-flex items-center gap-2">
+          <BeakerIcon className="w-4 h-4" aria-hidden />
           {rosTest.status === 'testing' ? 'Testing ROSBridge…' : 'Test ROSBridge'}
         </button>
-        <button
-          onClick={() => onReconnectROS?.()}
-          disabled={!onReconnectROS || isReconnecting}
-          className="axel-button-secondary px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50"
-        >
-          {isReconnecting ? 'Reconnecting…' : 'Reconnect ROS'}
-        </button>
-        <button onClick={copyConfig} className="axel-button-secondary px-4 py-2 rounded-xl text-sm font-bold">
+        <button onClick={copyConfig} className="axel-button-secondary px-4 py-2 rounded-xl text-sm font-bold inline-flex items-center gap-2">
+          <ClipboardDocumentIcon className="w-4 h-4" aria-hidden />
           {copied ? 'Copied' : 'Copy config'}
         </button>
-        <button onClick={resetDefaults} className="axel-button-secondary px-4 py-2 rounded-xl text-sm font-bold">
+        <button onClick={resetDefaults} className="axel-button-secondary px-4 py-2 rounded-xl text-sm font-bold inline-flex items-center gap-2">
+          <WrenchScrewdriverIcon className="w-4 h-4" aria-hidden />
           Reset defaults
         </button>
 
-        <div className="ml-auto text-xs axel-muted">
-          ROS: <span className={rosState.isConnected ? 'text-emerald-300' : 'text-rose-300'}>{rosState.isConnected ? 'Connected' : 'Disconnected'}</span>
-          <span className="mx-2 opacity-40">|</span>
-          Mode: <span className="text-cyan-200">{currentMode}</span>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-xs axel-muted hidden sm:block">Theme</span>
+          <button
+            type="button"
+            onClick={onToggleTheme}
+            className="axel-button-secondary px-3 py-2 rounded-xl text-xs font-bold inline-flex items-center gap-2"
+            title="Toggle theme"
+          >
+            {theme === 'dark' ? <MoonIcon className="w-4 h-4" aria-hidden /> : <SunIcon className="w-4 h-4" aria-hidden />}
+            {theme === 'dark' ? 'Dark' : 'Light'}
+          </button>
         </div>
       </div>
 
       {/* Save Message */}
       {saveMessage && (
-        <div className="bg-green-900 border border-green-700 rounded-lg p-4 text-green-200">
-          ✓ {saveMessage}
+        <div className="axel-surface rounded-2xl border border-emerald-500/20 bg-emerald-950/30 p-4 text-emerald-200 text-sm">
+          {saveMessage}
         </div>
       )}
 
       {/* Configuration Sections */}
-      <div className="grid grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Robot Configuration */}
         <div className="space-y-6">
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-            <h2 className="text-2xl font-bold text-white mb-4">🤖 Robot Configuration</h2>
+          <div className="axel-surface rounded-2xl border border-slate-700/60 p-6">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-2xl bg-[var(--axel-surface-soft)] border border-[color:var(--axel-border)] flex items-center justify-center">
+                <ComputerDesktopIcon className="w-5 h-5 text-slate-200" aria-hidden />
+              </div>
+              <div>
+                <h2 className="text-xl font-extrabold text-[color:var(--axel-text)] leading-tight">Robot</h2>
+                <p className="text-xs axel-muted">Identity and local network address</p>
+              </div>
+            </div>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Robot Name
-                </label>
+                <label className="block text-xs font-semibold text-slate-300 mb-2">Robot name</label>
                 <input
                   type="text"
                   value={formData.robotName}
                   onChange={(e) => handleChange('robotName', e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
+                  className="w-full px-4 py-3 rounded-xl bg-[var(--axel-surface-soft)] border border-[color:var(--axel-border)] text-[color:var(--axel-text)] placeholder:text-slate-400 focus:outline-none focus:border-cyan-500/60"
                   placeholder="e.g., AXEL-01"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Robot IP Address
-                </label>
+                <label className="block text-xs font-semibold text-slate-300 mb-2">Robot IP address</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={formData.robotIp}
                     onChange={(e) => handleChange('robotIp', e.target.value)}
-                    className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
+                    className="flex-1 px-4 py-3 rounded-xl bg-[var(--axel-surface-soft)] border border-[color:var(--axel-border)] text-[color:var(--axel-text)] placeholder:text-slate-400 focus:outline-none focus:border-cyan-500/60"
                     placeholder="e.g., 192.168.1.100"
                   />
                   <button
                     onClick={() => handleTestConnection(`http://${formData.robotIp}:8080`, 'Camera Stream')}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded font-medium transition-colors whitespace-nowrap"
+                    className="axel-button-secondary px-4 py-3 rounded-xl text-sm font-bold whitespace-nowrap inline-flex items-center gap-2"
                   >
-                    🧪 Test
+                    <BeakerIcon className="w-4 h-4" aria-hidden />
+                    Test
                   </button>
                 </div>
               </div>
@@ -303,14 +351,20 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
 
         {/* Network Configuration */}
         <div className="space-y-6">
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-            <h2 className="text-2xl font-bold text-white mb-4">🌐 Network Configuration</h2>
+          <div className="axel-surface rounded-2xl border border-slate-700/60 p-6">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-2xl bg-[var(--axel-surface-soft)] border border-[color:var(--axel-border)] flex items-center justify-center">
+                <SignalIcon className="w-5 h-5 text-slate-200" aria-hidden />
+              </div>
+              <div>
+                <h2 className="text-xl font-extrabold text-[color:var(--axel-text)] leading-tight">Network</h2>
+                <p className="text-xs axel-muted">ROSBridge and camera endpoints</p>
+              </div>
+            </div>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  ROS Bridge WebSocket URL
-                </label>
+                <label className="block text-xs font-semibold text-slate-300 mb-2">ROSBridge WebSocket URL</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -322,46 +376,42 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                         handleChange('rosUrl', normalized);
                       }
                     }}
-                    className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
+                    className="flex-1 px-4 py-3 rounded-xl bg-[var(--axel-surface-soft)] border border-[color:var(--axel-border)] text-[color:var(--axel-text)] placeholder:text-slate-400 focus:outline-none focus:border-cyan-500/60 font-mono text-sm"
                     placeholder="ws://192.168.1.100:9090"
                   />
                   <button
                     onClick={() => handleTestConnection(formData.rosUrl, 'ROS Bridge')}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded font-medium transition-colors whitespace-nowrap"
+                    className="axel-button-secondary px-4 py-3 rounded-xl text-sm font-bold whitespace-nowrap inline-flex items-center gap-2"
                   >
-                    🧪 Test
+                    <BeakerIcon className="w-4 h-4" aria-hidden />
+                    Test
                   </button>
                 </div>
                 <p className="text-xs text-slate-400 mt-2">
                   Normalized: <span className="font-mono text-slate-200">{effectiveRosUrl}</span>
                 </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  WebSocket URL for ROS2 bridge communication
-                </p>
+                <p className="text-xs axel-muted mt-1">WebSocket URL for rosbridge communication.</p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  MJPEG Camera Stream URL
-                </label>
+                <label className="block text-xs font-semibold text-slate-300 mb-2">MJPEG camera stream URL</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={formData.cameraUrl}
                     onChange={(e) => handleChange('cameraUrl', e.target.value)}
-                    className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
+                    className="flex-1 px-4 py-3 rounded-xl bg-[var(--axel-surface-soft)] border border-[color:var(--axel-border)] text-[color:var(--axel-text)] placeholder:text-slate-400 focus:outline-none focus:border-cyan-500/60 font-mono text-sm"
                     placeholder="http://192.168.1.100:8080/?action=stream"
                   />
                   <button
                     onClick={() => handleTestConnection(formData.cameraUrl, 'MJPEG Camera')}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded font-medium transition-colors whitespace-nowrap"
+                    className="axel-button-secondary px-4 py-3 rounded-xl text-sm font-bold whitespace-nowrap inline-flex items-center gap-2"
                   >
-                    🧪 Test
+                    <VideoCameraIcon className="w-4 h-4" aria-hidden />
+                    Test
                   </button>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  HTTP URL for MJPEG camera stream
-                </p>
+                <p className="text-xs axel-muted mt-1">HTTP URL to your MJPEG stream (e.g. `/?action=stream`).</p>
               </div>
             </div>
           </div>
@@ -369,40 +419,47 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
       </div>
 
       {/* Action Buttons */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <button
           onClick={handleSave}
-          className="px-6 py-3 bg-green-600 hover:bg-green-700 rounded-lg font-semibold transition-colors text-white"
+          className="axel-button-primary px-6 py-3 rounded-2xl font-extrabold text-white inline-flex items-center justify-center gap-2"
         >
-          💾 Save Configuration
+          <ArrowDownTrayIcon className="w-5 h-5" aria-hidden />
+          Save
         </button>
         <button
           onClick={handleLoad}
-          className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold transition-colors text-white"
+          className="axel-button-secondary px-6 py-3 rounded-2xl font-extrabold inline-flex items-center justify-center gap-2"
         >
-          📂 Load Configuration
+          <ArrowUpTrayIcon className="w-5 h-5" aria-hidden />
+          Load
         </button>
       </div>
 
       {/* Configuration Preview */}
-      <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-        <h3 className="text-lg font-bold text-white mb-4">📋 Configuration Summary</h3>
-        <div className="space-y-2 font-mono text-sm">
-          <div className="flex justify-between">
-            <span className="text-gray-400">Robot Name:</span>
-            <span className="text-blue-400">{formData.robotName}</span>
+      <div className="axel-surface rounded-2xl border border-slate-700/60 p-6">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            <ClipboardDocumentIcon className="w-5 h-5 text-slate-200" aria-hidden />
+            <h3 className="text-lg font-extrabold text-[color:var(--axel-text)]">Summary</h3>
           </div>
-          <div className="flex justify-between">
-            <span className="text-gray-400">Robot IP:</span>
-            <span className="text-blue-400">{formData.robotIp}</span>
+          <button onClick={copyConfig} className="axel-button-secondary px-4 py-2 rounded-xl text-xs font-bold inline-flex items-center gap-2">
+            <ClipboardDocumentIcon className="w-4 h-4" aria-hidden />
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+          <div className="rounded-2xl border border-[color:var(--axel-border)] bg-[var(--axel-surface-soft)] p-4">
+            <p className="text-xs axel-muted mb-1">Robot</p>
+            <p className="text-[color:var(--axel-text)] font-semibold">{formData.robotName}</p>
+            <p className="text-xs axel-muted mt-2">IP</p>
+            <p className="text-[color:var(--axel-text)] font-mono text-sm">{formData.robotIp}</p>
           </div>
-          <div className="flex justify-between">
-            <span className="text-gray-400">ROS URL:</span>
-            <span className="text-blue-400">{formData.rosUrl}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-400">Camera URL:</span>
-            <span className="text-blue-400 truncate">{formData.cameraUrl}</span>
+          <div className="rounded-2xl border border-[color:var(--axel-border)] bg-[var(--axel-surface-soft)] p-4">
+            <p className="text-xs axel-muted mb-1">ROS URL</p>
+            <p className="text-[color:var(--axel-text)] font-mono text-sm break-all">{formData.rosUrl}</p>
+            <p className="text-xs axel-muted mt-2">Camera URL</p>
+            <p className="text-[color:var(--axel-text)] font-mono text-sm break-all">{formData.cameraUrl}</p>
           </div>
         </div>
       </div>
@@ -411,7 +468,10 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
       <div className="axel-surface rounded-xl border border-slate-700/60 p-6 space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-2xl font-bold text-white">🧪 Diagnostics</h2>
+            <div className="flex items-center gap-2">
+              <BeakerIcon className="w-5 h-5 text-slate-200" aria-hidden />
+              <h2 className="text-2xl font-extrabold text-[color:var(--axel-text)]">Diagnostics</h2>
+            </div>
             <p className="text-sm axel-muted">Logs & debug (useful for soutenance)</p>
           </div>
           <button

@@ -165,17 +165,19 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
         pointLight.position.set(-1, 0.5, 1);
         scene.add(pointLight);
 
-        // Ground plane
-        const groundGeometry = new THREE.PlaneGeometry(5, 5);
-        const groundMaterial = new THREE.MeshStandardMaterial({
-          color: 0x3a3a4e,
-          roughness: 0.8,
-        });
-        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-        ground.rotation.x = -Math.PI / 2;
-        ground.position.y = -1;
-        ground.receiveShadow = true;
-        scene.add(ground);
+        if (!isIntroMode) {
+          // Ground plane (hide in intro so the screen doesn't look like a platform)
+          const groundGeometry = new THREE.PlaneGeometry(5, 5);
+          const groundMaterial = new THREE.MeshStandardMaterial({
+            color: 0x3a3a4e,
+            roughness: 0.8,
+          });
+          const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+          ground.rotation.x = -Math.PI / 2;
+          ground.position.y = -1;
+          ground.receiveShadow = true;
+          scene.add(ground);
+        }
 
         // Load URDF & Build scene
         const modelService = ModelService.getInstance();
@@ -262,6 +264,23 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
 
         robotGroupRef.current = robotScene;
         urdfBuilderRef.current = builder;
+
+        // Some parts of the URDF (like the stand/support) are represented as link visuals.
+        // If an earlier viewer instance hid them (e.g. intro), and we reuse the cached scene,
+        // we must restore visibility for non-intro views.
+        const setLinkVisualMeshesVisible = (linkName: string, visible: boolean) => {
+          const linkGroup = robotScene.getObjectByName(linkName);
+          if (!linkGroup) return;
+          // Don't toggle the group visibility (it can be an ancestor of the full robot).
+          linkGroup.children.forEach((child: any) => {
+            if (child?.isMesh) child.visible = visible;
+          });
+        };
+
+        // Stand/support links present in `inmoov-local.urdf`.
+        const shouldShowStand = !isIntroMode;
+        setLinkVisualMeshesVisible('base_link', shouldShowStand);
+        setLinkVisualMeshesVisible('pedestal_link', shouldShowStand);
 
         fitCameraToRobot(camera, robotScene, orbitTargetRef.current, 1.5);
         createOrUpdateHandHandles(scene, robotScene, handHandlesRef.current);
@@ -728,8 +747,11 @@ function fitCameraToBounds(
 }
 
 function computeRobotBodyBounds(root: THREE.Object3D): THREE.Box3 | null {
-  const excludedLinks = new Set(['base_link', 'pedestal_link', 'world']);
-  const excludedNameHints = ['support', 'stand', 'pedestal', 'base_plate', 'rod'];
+  // Keep framing inclusive: if the URDF includes a stand/support, we still want it visible
+  // (especially in the 3D Visualization page). Only exclude the synthetic world link.
+  const excludedLinks = new Set(['world']);
+  // Avoid filtering by name hints; some models place key geometry under these names.
+  const excludedNameHints: string[] = [];
   const bounds = new THREE.Box3();
   let hasAny = false;
 

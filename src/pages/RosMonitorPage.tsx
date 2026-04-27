@@ -46,18 +46,18 @@ const RosMonitorPage: React.FC<RosMonitorPageProps> = ({ topics, isLoading }) =>
   };
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-6 md:p-8 space-y-6" style={{ background: 'var(--axel-bg)', color: 'var(--axel-text)' }}>
       {/* Header */}
       <div>
-        <h1 className="text-4xl font-bold text-white mb-2">ROS2 Monitor</h1>
-        <p className="text-gray-400">Real-time topic monitoring and data inspection</p>
+        <h1 className="text-4xl font-extrabold axel-gradient-text mb-2">ROS2 Monitor</h1>
+        <p className="axel-muted">Real-time topic monitoring and data inspection</p>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
-        <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 text-center">
-          <p className="text-3xl font-bold text-blue-400">{topics.length}</p>
-          <p className="text-sm text-gray-400">Total Topics</p>
+        <div className="axel-surface rounded-2xl p-4 border text-center" style={{ borderColor: 'var(--axel-border)' }}>
+          <p className="text-3xl font-extrabold text-cyan-600 dark:text-cyan-300">{topics.length}</p>
+          <p className="text-sm axel-muted">Total Topics</p>
         </div>
         <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 text-center">
           <p className="text-3xl font-bold text-green-400">{priorityTopics.length}</p>

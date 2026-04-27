@@ -4,13 +4,12 @@ import {
   XCircleIcon,
   VideoCameraIcon,
   VideoCameraSlashIcon,
-  BoltIcon,
   WrenchScrewdriverIcon,
   StopCircleIcon,
   InformationCircleIcon,
 } from '@heroicons/react/24/outline';
 import EmergencyStopButton from '../components/shared/EmergencyStopButton';
-import { RobotState, ROSState } from '../types';
+import { RobotState, ROSState, RobotMode } from '../types';
 
 interface DashboardPageProps {
   rosState: ROSState;
@@ -18,6 +17,8 @@ interface DashboardPageProps {
   onEmergencyStop: (active: boolean) => void;
   /** When defined, E-stop UI mirrors ROS `std_msgs/Bool` (see `VITE_EMERGENCY_STOP_STATE_TOPIC`). */
   emergencyStopRemote?: boolean;
+  /** Mode selected in the dashboard (not the internal idle/manual/autonomous placeholder). */
+  currentMode: RobotMode;
 }
 
 const DashboardPage: React.FC<DashboardPageProps> = ({
@@ -25,7 +26,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
   cameraConnected,
   onEmergencyStop,
   emergencyStopRemote,
-  onModeChange,
+  currentMode,
 }) => {
   const [robotState, setRobotState] = useState<RobotState>({
     connected: rosState.isConnected,
@@ -51,6 +52,12 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
   const estopActive =
     emergencyStopRemote !== undefined ? emergencyStopRemote : robotState.emergency_stop;
 
+  // TODO: wire these from ROS topics once available.
+  const telemetryAvailable = false;
+
+  const axelBlue = 'rgba(11, 73, 101, 0.45)'; // #0B4965
+  const axelTurquoise = 'rgba(57, 184, 164, 0.45)'; // #39B8A4
+
   return (
     <div className="p-6 space-y-6 min-h-screen" style={{ background: 'var(--axel-bg)' }}>
       <div className="mb-8">
@@ -60,19 +67,20 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
       <div className="grid grid-cols-2 gap-6">
         <div
-          className={`relative overflow-hidden rounded-xl border ${
-            rosState.isConnected
-              ? 'bg-emerald-900/10 border-emerald-500/35'
-              : 'bg-rose-900/10 border-rose-500/35'
-          } p-6 transition-all duration-300`}
+          className="relative overflow-hidden rounded-xl border p-6 transition-all duration-300"
+          style={{
+            background: rosState.isConnected ? 'rgba(11, 73, 101, 0.12)' : 'rgba(244, 63, 94, 0.08)',
+            borderColor: rosState.isConnected ? axelBlue : 'rgba(244, 63, 94, 0.28)',
+          }}
         >
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
               <p className="axel-muted text-sm font-medium">ROS Connection</p>
               <p
-                className={`text-2xl font-bold mt-2 ${
-                  rosState.isConnected ? 'text-green-400' : 'text-red-400'
-                }`}
+                className="text-2xl font-bold mt-2"
+                style={{
+                  color: rosState.isConnected ? 'rgba(57, 184, 164, 0.95)' : 'rgba(248, 113, 113, 0.95)',
+                }}
               >
                 {rosState.isConnected ? 'Connected' : 'Disconnected'}
               </p>
@@ -80,14 +88,16 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
               {!rosState.isConnected && (
                 <p className="mt-3 text-xs axel-muted flex items-start gap-2">
                   <InformationCircleIcon className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" aria-hidden />
-                  <span>Reconnect from the status banner or Connection Center.</span>
+                  <span>Reconnect from the sidebar.</span>
                 </p>
               )}
             </div>
             <div
-              className={`shrink-0 w-14 h-14 rounded-full flex items-center justify-center ${
-                rosState.isConnected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-              }`}
+              className="shrink-0 w-14 h-14 rounded-full flex items-center justify-center"
+              style={{
+                background: rosState.isConnected ? 'rgba(57, 184, 164, 0.18)' : 'rgba(244, 63, 94, 0.14)',
+                color: rosState.isConnected ? 'rgba(57, 184, 164, 0.95)' : 'rgba(248, 113, 113, 0.95)',
+              }}
             >
               {rosState.isConnected ? (
                 <CheckCircleIcon className="w-8 h-8" aria-hidden />
@@ -99,19 +109,20 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
         </div>
 
         <div
-          className={`relative overflow-hidden rounded-xl border ${
-            cameraConnected
-              ? 'bg-cyan-900/10 border-cyan-500/35'
-              : 'bg-slate-800/40 border-slate-600/60'
-          } p-6 transition-all duration-300`}
+          className="relative overflow-hidden rounded-xl border p-6 transition-all duration-300"
+          style={{
+            background: cameraConnected ? 'rgba(57, 184, 164, 0.08)' : 'rgba(244, 63, 94, 0.08)',
+            borderColor: cameraConnected ? axelTurquoise : 'rgba(244, 63, 94, 0.28)',
+          }}
         >
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="axel-muted text-sm font-medium">Camera Feed</p>
               <p
-                className={`text-2xl font-bold mt-2 ${
-                  cameraConnected ? 'text-blue-400' : 'text-gray-400'
-                }`}
+                className="text-2xl font-bold mt-2"
+                style={{
+                  color: cameraConnected ? 'rgba(57, 184, 164, 0.95)' : 'rgba(248, 113, 113, 0.95)',
+                }}
               >
                 {cameraConnected ? 'Online' : 'Offline'}
               </p>
@@ -120,9 +131,11 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
               </p>
             </div>
             <div
-              className={`shrink-0 w-14 h-14 rounded-full flex items-center justify-center ${
-                cameraConnected ? 'bg-blue-500/20 text-blue-400' : 'bg-gray-500/20 text-gray-400'
-              }`}
+              className="shrink-0 w-14 h-14 rounded-full flex items-center justify-center"
+              style={{
+                background: cameraConnected ? 'rgba(57, 184, 164, 0.18)' : 'rgba(244, 63, 94, 0.14)',
+                color: cameraConnected ? 'rgba(57, 184, 164, 0.95)' : 'rgba(248, 113, 113, 0.95)',
+              }}
             >
               {cameraConnected ? (
                 <VideoCameraIcon className="w-8 h-8" aria-hidden />
@@ -134,75 +147,48 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6">
         <div className="axel-card p-6">
-          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-            <BoltIcon className="w-5 h-5 text-amber-400 shrink-0" aria-hidden />
-            Power Supply
-          </h3>
-
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-3 bg-green-600/20 rounded-lg border border-green-700/50">
-              <span className="text-gray-300 text-sm font-medium">Main Power</span>
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-600/30 text-green-300 rounded-full text-sm font-semibold">
-                <CheckCircleIcon className="w-4 h-4" aria-hidden />
-                Connected
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between p-3 bg-gray-700/30 rounded-lg">
-              <span className="text-gray-400 text-sm">Voltage</span>
-              <span className="text-green-400 font-semibold">230V AC</span>
-            </div>
-
-            <div className="flex items-center justify-between p-3 bg-gray-700/30 rounded-lg">
-              <span className="text-gray-400 text-sm">Power Status</span>
-              <span className="text-green-400 font-semibold">Stable</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="axel-card p-6">
-          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-            <WrenchScrewdriverIcon className="w-5 h-5 text-slate-300 shrink-0" aria-hidden />
+          <h3 className="text-lg font-bold text-[color:var(--axel-text)] mb-4 flex items-center gap-2">
+            <WrenchScrewdriverIcon className="w-5 h-5 shrink-0" style={{ color: 'rgba(57, 184, 164, 0.9)' }} aria-hidden />
             System Status
           </h3>
 
           <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-gray-700/30 rounded-lg">
-              <span className="text-gray-400 text-sm">Robot Mode</span>
-              <span className="px-3 py-1 bg-blue-600/30 text-blue-300 rounded-full text-sm font-semibold capitalize">
-                {robotState.mode}
+            <div className="flex items-center justify-between p-3 rounded-xl border border-[color:var(--axel-border)] bg-[var(--axel-surface-soft)]">
+              <span className="axel-muted text-sm">Robot Mode</span>
+              <span className="px-3 py-1 rounded-full text-sm font-semibold border border-cyan-500/25 bg-cyan-500/10 text-cyan-700 dark:text-cyan-200">
+                {currentMode}
               </span>
             </div>
 
-            <div className="flex items-center justify-between p-3 bg-gray-700/30 rounded-lg">
-              <span className="text-gray-400 text-sm">Motor Status</span>
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-600/30 text-green-300 rounded-full text-sm font-semibold">
-                <CheckCircleIcon className="w-4 h-4" aria-hidden />
-                Operational
+            <div className="flex items-center justify-between p-3 rounded-xl border border-[color:var(--axel-border)] bg-[var(--axel-surface-soft)]">
+              <span className="axel-muted text-sm">Motor Status</span>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold border border-slate-500/20 bg-slate-500/10 text-[color:var(--axel-text)]">
+                {telemetryAvailable ? <CheckCircleIcon className="w-4 h-4" aria-hidden /> : null}
+                {telemetryAvailable ? 'Operational' : 'N/A'}
               </span>
             </div>
 
-            <div className="flex items-center justify-between p-3 bg-gray-700/30 rounded-lg">
-              <span className="text-gray-400 text-sm">All Systems</span>
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-600/30 text-green-300 rounded-full text-sm font-semibold">
-                <CheckCircleIcon className="w-4 h-4" aria-hidden />
-                Operational
+            <div className="flex items-center justify-between p-3 rounded-xl border border-[color:var(--axel-border)] bg-[var(--axel-surface-soft)]">
+              <span className="axel-muted text-sm">All Systems</span>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold border border-slate-500/20 bg-slate-500/10 text-[color:var(--axel-text)]">
+                {telemetryAvailable ? <CheckCircleIcon className="w-4 h-4" aria-hidden /> : null}
+                {telemetryAvailable ? 'Operational' : 'N/A'}
               </span>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="bg-rose-900/10 border border-rose-500/35 rounded-xl p-6">
+      <div className="rounded-xl p-6 border border-rose-500/20 bg-rose-500/5">
         <div className="flex items-center justify-between gap-6 flex-wrap">
           <div>
-            <h3 className="text-lg font-bold text-white mb-1 flex items-center gap-2">
-              <StopCircleIcon className="w-5 h-5 text-red-400 shrink-0" aria-hidden />
+            <h3 className="text-lg font-bold text-[color:var(--axel-text)] mb-1 flex items-center gap-2">
+              <StopCircleIcon className="w-5 h-5 text-rose-500 shrink-0" aria-hidden />
               Emergency Stop
             </h3>
-            <p className="text-sm text-gray-400">Press to halt all motors immediately</p>
+            <p className="text-sm axel-muted">Press to halt all motors immediately</p>
             {emergencyStopRemote !== undefined && (
               <p className="text-xs axel-muted mt-2 flex items-center gap-1.5">
                 <InformationCircleIcon className="w-3.5 h-3.5 shrink-0" aria-hidden />

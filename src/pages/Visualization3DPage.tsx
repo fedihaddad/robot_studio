@@ -14,8 +14,6 @@ interface Visualization3DPageProps {
   joints?: Record<number, number>;
   jointStatesByName?: Record<string, number>;
   rosService: ROSService | null;
-  onReconnectROS?: () => void;
-  isReconnecting?: boolean;
   onModeChange?: (mode: RobotMode) => Promise<boolean>;
 }
 
@@ -23,8 +21,6 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
   joints = {},
   jointStatesByName = {},
   rosService,
-  onReconnectROS,
-  isReconnecting = false,
   onModeChange,
 }) => {
   const [activeTab, setActiveTab] = useState<'head' | 'arm' | 'mode'>('head');
@@ -32,11 +28,6 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
   const [showCollisions, setShowCollisions] = useState(true);
   const [showMarkers, setShowMarkers] = useState(true);
   const [showTF, setShowTF] = useState(false);
-  const [reconnectAttempted, setReconnectAttempted] = useState(false);
-  const [reconnectToast, setReconnectToast] = useState<{
-    type: 'success' | 'error';
-    message: string;
-  } | null>(null);
   const [currentSliderValues, setCurrentSliderValues] = useState<Record<number, number>>({});
   const [initialSliderValues, setInitialSliderValues] = useState<Record<number, number> | null>(null);
   const [previewJointStatesOnline, setPreviewJointStatesOnline] = useState<Record<string, number>>({});
@@ -83,33 +74,6 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
     const clampedDisplay = Math.max(0, Math.min(180, displayAngle));
     return min + (clampedDisplay / 180) * (max - min);
   };
-
-  const handleReconnectClick = () => {
-    setReconnectAttempted(true);
-    onReconnectROS?.();
-  };
-
-  React.useEffect(() => {
-    if (!reconnectAttempted || isReconnecting) return;
-
-    if (isConnected) {
-      setReconnectToast({
-        type: 'success',
-        message: 'ROS reconnected successfully.',
-      });
-    } else {
-      setReconnectToast({
-        type: 'error',
-        message: 'Reconnect failed. Check rosbridge and network.',
-      });
-    }
-
-    const timer = window.setTimeout(() => {
-      setReconnectToast(null);
-      setReconnectAttempted(false);
-    }, 2600);
-    return () => window.clearTimeout(timer);
-  }, [reconnectAttempted, isReconnecting, isConnected]);
 
   // Capture initial slider values on first mount (only once)
   React.useEffect(() => {
@@ -401,7 +365,7 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
   }, [convertedServoStates, jointStatesByName, offlineJointStates, isConnected, previewJointStatesOnline]);
 
   return (
-    <div className="p-6 h-full flex flex-col gap-6 text-white" style={{ background: 'var(--axel-bg)' }}>
+    <div className="p-6 h-full flex flex-col gap-6" style={{ background: 'var(--axel-bg)', color: 'var(--axel-text)' }}>
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-4xl font-bold axel-gradient-text mb-2 tracking-tight">
@@ -411,33 +375,33 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
         </div>
         <div className="flex gap-2 items-center">
           <div
-            className={`px-5 py-2.5 rounded-xl font-bold tracking-wide text-sm border ${isConnected
-                ? 'bg-emerald-900/20 text-emerald-300 border-emerald-500/30'
-                : 'bg-rose-900/20 text-rose-300 border-rose-500/30'
-              }`}
+            className="px-5 py-2.5 rounded-xl font-bold tracking-wide text-sm border"
+            style={{
+              background: 'var(--axel-surface-soft)',
+              borderColor: 'var(--axel-border)',
+            }}
           >
-            {isConnected ? '🟢 Connected to ROS' : '📺 Offline Mode'}
+            <span className="inline-flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400' : 'bg-rose-400'} ${isConnected ? 'animate-pulse' : ''}`} />
+              <span className={isConnected ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300'}>
+                {isConnected ? 'Connected to ROS' : 'Offline mode'}
+              </span>
+            </span>
           </div>
           {!isConnected && (
-            <button
-              onClick={handleReconnectClick}
-              disabled={!onReconnectROS || isReconnecting}
-              className={`px-5 py-2.5 rounded-xl font-bold transition-all text-sm ${isReconnecting
-                  ? 'bg-slate-700/50 text-slate-400 cursor-not-allowed border border-slate-600/50'
-                  : 'axel-button-primary text-white'
-                }`}
-            >
-              {isReconnecting ? 'Reconnecting...' : 'Reconnect ROS'}
-            </button>
+            <div />
           )}
-          <label className="flex items-center gap-2 axel-card px-4 py-2.5 rounded-xl cursor-pointer hover:bg-slate-700/40 transition-colors">
+          <label
+            className="flex items-center gap-2 axel-card px-4 py-2.5 rounded-xl cursor-pointer transition-colors"
+            style={{ color: 'var(--axel-text)' }}
+          >
             <input
               type="checkbox"
               checked={useEnhancedVisualization}
               onChange={(e) => setUseEnhancedVisualization(e.target.checked)}
-              className="rounded text-cyan-500 focus:ring-cyan-500/50 bg-slate-900 border-slate-700 cursor-pointer"
+              className="rounded text-cyan-500 focus:ring-cyan-500/50 cursor-pointer"
             />
-            <span className="text-sm font-semibold text-slate-200">Premium View</span>
+            <span className="text-sm font-semibold">Premium View</span>
           </label>
         </div>
       </div>
@@ -445,25 +409,14 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
       {!isConnected && (
         <div className="axel-card rounded-2xl p-4 flex items-center gap-3">
           <div className="w-2 h-2 rounded-full bg-blue-400 animate-ping"></div>
-          <p className="text-blue-100 font-medium">
-            <strong className="text-blue-300">Offline Mode Active:</strong> Control the robot dynamically in simulation by clicking and dragging parts or using sliders!
+          <p className="font-medium" style={{ color: 'var(--axel-text)' }}>
+            <strong className="text-cyan-600 dark:text-cyan-300">Offline mode active:</strong> Control the robot in simulation by dragging parts or using sliders.
           </p>
         </div>
       )}
 
-      {reconnectToast && (
-        <div
-          className={`fixed top-20 right-6 z-50 px-4 py-3 rounded-lg border shadow-lg ${reconnectToast.type === 'success'
-              ? 'bg-green-900 border-green-700 text-green-200'
-              : 'bg-red-900 border-red-700 text-red-200'
-            }`}
-        >
-          <p className="text-sm font-semibold">{reconnectToast.message}</p>
-        </div>
-      )}
-
       <div className="flex-1 flex gap-6 overflow-hidden">
-        <div className="flex-1 min-w-0 h-full relative rounded-2xl overflow-hidden border border-slate-700/70 axel-surface">
+        <div className="flex-1 min-w-0 h-full relative rounded-2xl overflow-hidden border axel-surface" style={{ borderColor: 'var(--axel-border)' }}>
           {useEnhancedVisualization ? (
             <EnhancedVisualization
               joints={{}}
@@ -486,10 +439,10 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
           )}
         </div>
 
-        <div className="w-[380px] flex flex-col rounded-2xl axel-surface border border-slate-700/70 overflow-hidden">
-          <div className="border-b border-slate-700/60 p-4">
+        <div className="w-[380px] flex flex-col rounded-2xl axel-surface border overflow-hidden" style={{ borderColor: 'var(--axel-border)' }}>
+          <div className="border-b p-4" style={{ borderColor: 'var(--axel-border)' }}>
             <div className="flex justify-between items-center mb-2">
-              <h2 className="text-base font-bold text-white tracking-tight">Live Control</h2>
+              <h2 className="text-base font-bold tracking-tight" style={{ color: 'var(--axel-text)' }}>Live Control</h2>
               <div className="flex gap-3 text-[10px] axel-muted font-medium">
                 <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></div> {new Date(lastUpdate).toLocaleTimeString()}</span>
                 <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div> {Object.keys(servoStates).length} Servos</span>
@@ -498,7 +451,7 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
 
             <button
               onClick={handleResetRobot}
-              className="w-full px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg transition-all text-xs flex items-center justify-center gap-2 tracking-wide border border-rose-400/30"
+              className="w-full px-4 py-2 axel-button-secondary font-bold rounded-xl transition-all text-xs flex items-center justify-center gap-2 tracking-wide"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
               Reset All Servos
@@ -574,12 +527,12 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
             )}
           </div>
 
-          <div className="flex gap-2 p-3 bg-slate-900/50 border-b border-slate-700/60">
+          <div className="flex gap-2 p-3 border-b" style={{ background: 'var(--axel-surface-soft)', borderColor: 'var(--axel-border)' }}>
             <button
               onClick={() => setActiveTab('head')}
               className={`flex-1 px-3 py-2.5 rounded-xl font-bold transition-all text-xs tracking-wider ${activeTab === 'head'
                   ? 'axel-button-primary text-white'
-                  : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/60 hover:text-white border border-transparent hover:border-slate-600/70'
+                  : 'axel-button-secondary'
                 }`}
             >
               HEAD ({headServoIds.length})
@@ -588,7 +541,7 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
               onClick={() => setActiveTab('arm')}
               className={`flex-1 px-3 py-2.5 rounded-xl font-bold transition-all text-xs tracking-wider ${activeTab === 'arm'
                   ? 'axel-button-primary text-white'
-                  : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/60 hover:text-white border border-transparent hover:border-slate-600/70'
+                  : 'axel-button-secondary'
                 }`}
             >
               ARM ({armServoIds.length})
@@ -597,10 +550,10 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
               onClick={() => setActiveTab('mode')}
               className={`flex-1 px-3 py-2.5 rounded-xl font-bold transition-all text-xs tracking-wider ${activeTab === 'mode'
                   ? 'axel-button-primary text-white'
-                  : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/60 hover:text-white border border-transparent hover:border-slate-600/70'
+                  : 'axel-button-secondary'
                 }`}
             >
-              MODE 🎯
+              MODE
             </button>
           </div>
 
@@ -627,13 +580,17 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
                   const currentDisplayAngle = toDisplayAngle(currentRawAngle, config.min, config.max);
 
                   return (
-                    <div key={servoId} className="group bg-slate-800/45 hover:bg-slate-700/50 p-4 rounded-2xl transition-all border border-transparent hover:border-cyan-500/30">
+                    <div
+                      key={servoId}
+                      className="group p-4 rounded-2xl transition-all border hover:border-cyan-500/30"
+                      style={{ background: 'var(--axel-surface-soft)', borderColor: 'transparent' }}
+                    >
                       <div className="flex justify-between items-center mb-3">
-                        <label className="text-[11px] font-bold text-slate-300 flex items-center gap-2 uppercase tracking-wide">
+                        <label className="text-[11px] font-bold flex items-center gap-2 uppercase tracking-wide" style={{ color: 'var(--axel-text)' }}>
                           <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 opacity-50 group-hover:opacity-100 transition-opacity"></span>
-                          {config.name} <span className="text-slate-500 ml-1">#{servoId}</span>
+                          {config.name} <span className="axel-muted ml-1">#{servoId}</span>
                         </label>
-                        <div className="px-2 py-1 bg-black/40 rounded-lg text-xs text-cyan-300 font-mono shadow-inner border border-white/5">
+                        <div className="px-2 py-1 rounded-lg text-xs font-mono shadow-inner border border-[color:var(--axel-border)] bg-[var(--axel-surface)] text-cyan-300">
                           {currentDisplayAngle.toFixed(1)}°
                         </div>
                       </div>
@@ -667,13 +624,17 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
                   const currentDisplayAngle = toDisplayAngle(currentRawAngle, config.min, config.max);
 
                   return (
-                    <div key={servoId} className="group bg-slate-800/45 hover:bg-slate-700/50 p-4 rounded-2xl transition-all border border-transparent hover:border-cyan-500/30">
+                    <div
+                      key={servoId}
+                      className="group p-4 rounded-2xl transition-all border hover:border-cyan-500/30"
+                      style={{ background: 'var(--axel-surface-soft)', borderColor: 'transparent' }}
+                    >
                       <div className="flex justify-between items-center mb-3">
-                        <label className="text-[11px] font-bold text-slate-300 flex items-center gap-2 uppercase tracking-wide">
+                        <label className="text-[11px] font-bold flex items-center gap-2 uppercase tracking-wide" style={{ color: 'var(--axel-text)' }}>
                           <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 opacity-50 group-hover:opacity-100 transition-opacity"></span>
-                          {config.name} <span className="text-slate-500 ml-1">#{servoId}</span>
+                          {config.name} <span className="axel-muted ml-1">#{servoId}</span>
                         </label>
-                        <div className="px-2 py-1 bg-black/40 rounded-lg text-xs text-cyan-300 font-mono shadow-inner border border-white/5">
+                        <div className="px-2 py-1 rounded-lg text-xs font-mono shadow-inner border border-[color:var(--axel-border)] bg-[var(--axel-surface)] text-cyan-300">
                           {currentDisplayAngle.toFixed(1)}°
                         </div>
                       </div>
