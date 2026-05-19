@@ -70,8 +70,9 @@ const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ rosState, rosServic
 
   const copySummary = async () => {
     const text = [
-      `ROS: ${rosState.isConnected ? 'connected' : 'disconnected'} (${rosState.rosUrl})`,
+      `ROS: ${rosState.status || (rosState.isConnected ? 'connected' : 'disconnected')} (${rosState.rosUrl})`,
       rosState.error ? `ROS error: ${rosState.error}` : null,
+      rosState.resolvedRosUrl ? `Resolved endpoint: ${rosState.resolvedRosUrl}` : null,
       `AI node: ${aiNodeActive ? 'active' : 'standby'}`,
       `Mode: ${currentMode}`,
       `/joint_states age: ${formatAge(snapshots.jointTs)}`,
@@ -112,8 +113,8 @@ const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ rosState, rosServic
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <Stat
           label="ROS"
-          value={rosState.isConnected ? 'Connected' : 'Disconnected'}
-          hint={rosState.error ? `Error: ${rosState.error}` : rosState.rosUrl}
+          value={rosState.status ? rosState.status.replace('_', ' ') : (rosState.isConnected ? 'Connected' : 'Disconnected')}
+          hint={rosState.error ? `Error: ${rosState.error}` : (rosState.resolvedRosUrl || rosState.rosUrl)}
         />
         <Stat label="AI Node" value={aiNodeActive ? 'Active' : 'Standby'} hint="/axel/heartbeat" />
         <Stat label="Mode" value={currentMode} hint="Live Axel" />

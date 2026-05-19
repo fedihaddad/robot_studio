@@ -475,7 +475,7 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
             <div className="mb-4 flex justify-center">
               <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
             </div>
-            <p className="text-white text-lg font-semibold">Loading 3D Model...</p>
+            <p className="text-white text-lg font-semibold">{t('common.loading')}</p>
             {showLoadingDetails && <p className="text-gray-400 text-sm mt-2">{loadingMessage}</p>}
           </div>
         </div>
@@ -485,9 +485,9 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
       {error && (
         <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-70 z-20">
           <div className="text-center max-w-md bg-gray-800 p-6 rounded">
-            <p className="text-red-500 text-lg font-semibold mb-2">Error Loading Model</p>
+            <p className="text-red-500 text-lg font-semibold mb-2">{t('viewer.errorLoading')}</p>
             <p className="text-red-300 text-sm mb-4 break-words">{error}</p>
-            <p className="text-gray-400 text-xs">Check browser console for details</p>
+            <p className="text-gray-400 text-xs">{t('viewer.checkConsole')}</p>
           </div>
         </div>
       )}
@@ -512,13 +512,12 @@ const RobotViewer: React.FC<RobotViewerProps> = ({
       {/* Debug Info Panel */}
       {debugMode && (
         <div className="absolute top-14 right-4 bg-gray-800 border border-green-500 rounded p-3 z-10 max-w-xs">
-          <h3 className="text-green-400 font-bold mb-2 text-sm">Debug Info</h3>
+          <h3 className="text-green-400 font-bold mb-2 text-sm">{t('viewer.debugInfo')}</h3>
           <div className="text-xs text-gray-300 space-y-1">
             <p>ROS: {isConnected ? 'Connected' : 'Disconnected'}</p>
             <p>Mode: {isConnected ? 'ROS Streaming' : 'Local Model'}</p>
             <p>Loading: {isLoading ? 'Yes' : 'No'}</p>
             {debugStats && <p>{debugStats}</p>}
-            <p>Press "Fit View" anytime to re-center</p>
           </div>
         </div>
       )}

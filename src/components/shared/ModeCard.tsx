@@ -10,7 +10,7 @@ interface ModeCardProps {
 }
 
 const ModeCard: React.FC<ModeCardProps> = ({ onModeChange, isConnected = true }) => {
-  const { currentMode, setCurrentMode, saveModePreference } = useAppStore();
+  const { currentMode, setCurrentMode, saveModePreference, t } = useAppStore();
   const [isChanging, setIsChanging] = useState(false);
   const [showModeSelector, setShowModeSelector] = useState(false);
   const modeCapabilities = getModeCapabilities(currentMode);
@@ -51,14 +51,14 @@ const ModeCard: React.FC<ModeCardProps> = ({ onModeChange, isConnected = true })
         <div>
           <h3 className="text-lg font-bold text-white flex items-center gap-3">
             <ModeIcon iconName={modeCapabilities.icon} className="w-6 h-6" />
-            Robot Mode
+            {t('modeCard.robotMode')}
           </h3>
-          <p className="text-xs text-gray-400 mt-1">Switch operational mode</p>
+          <p className="text-xs text-gray-400 mt-1">{t('modeCard.switchMode')}</p>
         </div>
         {!isConnected && (
           <div className="px-3 py-1 bg-yellow-600/30 text-yellow-300 rounded-full text-xs font-semibold flex items-center gap-1">
             <span>⚠️</span>
-            <span>Local Only</span>
+            <span>{t('modeCard.localOnly')}</span>
           </div>
         )}
       </div>
@@ -67,12 +67,12 @@ const ModeCard: React.FC<ModeCardProps> = ({ onModeChange, isConnected = true })
       <div className={`relative overflow-hidden rounded-lg border ${modeCapabilities.borderColor} ${modeCapabilities.bgColor} p-4 mb-4 transition-all duration-300`}>
         <div className="flex items-start justify-between">
           <div className="flex-1">
-            <p className="text-xs text-gray-400 mb-1">Current Mode</p>
+            <p className="text-xs text-gray-400 mb-1">{t('modeCard.currentMode')}</p>
             <p className={`text-2xl font-bold ${modeCapabilities.color} flex items-center gap-2`}>
-              {modeCapabilities.label}
+              {t(`mode.${modeCapabilities.mode}.label`, modeCapabilities.label)}
             </p>
             <p className="text-xs text-gray-400 mt-2 max-w-xs">
-              {modeCapabilities.description}
+              {t(`mode.${modeCapabilities.mode}.description`, modeCapabilities.description)}
             </p>
           </div>
           <div className={`${modeCapabilities.color} opacity-20 ml-4`}>
@@ -83,25 +83,25 @@ const ModeCard: React.FC<ModeCardProps> = ({ onModeChange, isConnected = true })
         {/* Mode Constraints */}
         <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-gray-700/50">
           <div className="text-xs">
-            <span className="text-gray-400">Physical Actions: </span>
+            <span className="text-gray-400">{t('modeCard.physicalActions')}: </span>
             <span className={modeCapabilities.allowPhysicalActions ? 'text-green-400' : 'text-red-400'}>
-              {modeCapabilities.allowPhysicalActions ? '✓ Enabled' : '✗ Disabled'}
+              {modeCapabilities.allowPhysicalActions ? `✓ ${t('modeCard.enabled')}` : `✗ ${t('modeCard.disabled')}`}
             </span>
           </div>
           <div className="text-xs">
-            <span className="text-gray-400">Web Search: </span>
+            <span className="text-gray-400">{t('modeCard.webSearch')}: </span>
             <span className={modeCapabilities.allowWebSearch ? 'text-green-400' : 'text-red-400'}>
-              {modeCapabilities.allowWebSearch ? '✓ Enabled' : '✗ Disabled'}
+              {modeCapabilities.allowWebSearch ? `✓ ${t('modeCard.enabled')}` : `✗ ${t('modeCard.disabled')}`}
             </span>
           </div>
           <div className="text-xs">
-            <span className="text-gray-400">Vision Analysis: </span>
+            <span className="text-gray-400">{t('modeCard.visionAnalysis')}: </span>
             <span className={modeCapabilities.allowVisionAnalysis ? 'text-green-400' : 'text-red-400'}>
-              {modeCapabilities.allowVisionAnalysis ? '✓ Enabled' : '✗ Disabled'}
+              {modeCapabilities.allowVisionAnalysis ? `✓ ${t('modeCard.enabled')}` : `✗ ${t('modeCard.disabled')}`}
             </span>
           </div>
           <div className="text-xs">
-            <span className="text-gray-400">Safety Level: </span>
+            <span className="text-gray-400">{t('modeCard.safetyLevel')}: </span>
             <span className={`${
               modeCapabilities.safetyLevel === 'high' ? 'text-green-400' :
               modeCapabilities.safetyLevel === 'medium' ? 'text-yellow-400' :
@@ -125,7 +125,7 @@ const ModeCard: React.FC<ModeCardProps> = ({ onModeChange, isConnected = true })
           }`}
         >
           <span>{showModeSelector ? '✕' : '⚙️'}</span>
-          <span>{isChanging ? 'Switching Mode...' : 'Switch Mode'}</span>
+          <span>{isChanging ? t('modeCard.switchingMode') : t('modeCard.switchModeAction')}</span>
         </button>
 
         {/* Mode Dropdown */}
@@ -150,10 +150,10 @@ const ModeCard: React.FC<ModeCardProps> = ({ onModeChange, isConnected = true })
                         <ModeIcon iconName={mode.icon} className={`w-5 h-5 ${mode.color}`} />
                         <div>
                           <p className={`font-semibold ${mode.color}`}>
-                            {mode.label}
+                            {t(`mode.${mode.mode}.label`, mode.label)}
                           </p>
                           <p className="text-xs text-gray-400">
-                            {mode.description}
+                            {t(`mode.${mode.mode}.description`, mode.description)}
                           </p>
                         </div>
                       </div>
@@ -172,7 +172,7 @@ const ModeCard: React.FC<ModeCardProps> = ({ onModeChange, isConnected = true })
       {/* Info Footer */}
       <div className="mt-4 p-3 bg-gray-700/20 rounded-lg border border-gray-700/30">
         <p className="text-xs text-gray-400">
-          <span className="text-gray-300 font-semibold">💡 Tip:</span> Mode changes affect robot behavior and constraints. Some modes restrict physical actions for safety.
+          {t('modeCard.tip')}
         </p>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { StopCircleIcon, HandRaisedIcon } from '@heroicons/react/24/outline';
+import { useAppStore } from '../../store/appStore';
 
 interface EmergencyStopButtonProps {
   active: boolean;
@@ -12,6 +13,7 @@ const EmergencyStopButton: React.FC<EmergencyStopButtonProps> = ({
   onToggle,
   disabled = false,
 }) => {
+  const { t } = useAppStore();
   return (
     <button
       type="button"
@@ -31,12 +33,12 @@ const EmergencyStopButton: React.FC<EmergencyStopButtonProps> = ({
       {active ? (
         <>
           <StopCircleIcon className="w-6 h-6 shrink-0" aria-hidden />
-          <span>Emergency stop active</span>
+          <span>{t('demo.estopActive', 'Emergency stop active')}</span>
         </>
       ) : (
         <>
           <HandRaisedIcon className="w-6 h-6 shrink-0" aria-hidden />
-          <span>Emergency stop</span>
+          <span>{t('dashboard.emergencyStop', 'Emergency stop')}</span>
         </>
       )}
     </button>

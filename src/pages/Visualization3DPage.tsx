@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import RobotViewer from '../components/shared/RobotViewer';
 import EnhancedVisualization from '../components/3d-visualization/EnhancedVisualization';
 import ServoSlider from '../components/shared/ServoSlider';
@@ -9,6 +9,19 @@ import { ServoCommand, RobotMode } from '../types';
 import { ROSService } from '../services/ros.service';
 import { getServoConfig } from '../config/servoDegrees.config';
 import { servoJointMapping } from '../config/complete-joints.config';
+import {
+  BoltIcon,
+  CameraIcon,
+  CheckCircleIcon,
+  HandRaisedIcon,
+  HomeIcon,
+  MicrophoneIcon,
+  PlayIcon,
+  ShieldCheckIcon,
+  StopCircleIcon,
+  EyeIcon,
+  SparklesIcon,
+} from '@heroicons/react/24/outline';
 
 interface Visualization3DPageProps {
   joints?: Record<number, number>;
@@ -23,7 +36,7 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
   rosService,
   onModeChange,
 }) => {
-  const [activeTab, setActiveTab] = useState<'head' | 'arm' | 'mode'>('head');
+  const [activeTab, setActiveTab] = useState<'head' | 'arm' | 'mode' | 'demo'>('head');
   const [useEnhancedVisualization, setUseEnhancedVisualization] = useState(true);
   const [showCollisions, setShowCollisions] = useState(true);
   const [showMarkers, setShowMarkers] = useState(true);
@@ -36,9 +49,26 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
     updateJointState,
     updateJointStates,
     resetJointStates,
+    t,
   } = useAppStore();
   const [gestureRunning, setGestureRunning] = useState(false);
-  const [gestureStatus, setGestureStatus] = useState<string>('Ready');
+  const [gestureStatus, setGestureStatus] = useState<string>(t('common.ready'));
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Demo mode state (declarations only - functions defined after isConnected)
+  type DemoStatus = 'ready' | 'running' | 'done' | 'failed';
+  const [demoStatus, setDemoStatus] = useState<DemoStatus>('ready');
+  const [activeDemoId, setActiveDemoId] = useState<string | null>(null);
+  const [demoStepText, setDemoStepText] = useState<string>(t('demo.ready', 'Ready'));
+  const demoRunTokenRef = useRef(0);
+
+  React.useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   const {
     servoStates,
@@ -52,6 +82,279 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
     enabled: true,
   });
   const isConnected = rosService?.isConnected() ?? servoHookConnected;
+
+  // Demo mode functions (must be after isConnected is defined)
+  const DEMO_STOPPED_ERROR = 'DEMO_STOPPED';
+  const SAFE_POSE: Record<string, number> = {
+    r_shoulder_out_joint: 0,
+    r_shoulder_lift_joint: 0,
+    r_upper_arm_roll_joint: 0,
+    r_elbow_flex_joint: 0,
+    r_wrist_roll_joint: 0,
+    l_shoulder_out_joint: 0,
+    l_shoulder_lift_joint: 0,
+    l_upper_arm_roll_joint: 0,
+    l_elbow_flex_joint: 0,
+    l_wrist_roll_joint: 0,
+    head_tilt_joint: 0,
+    head_pan_joint: 0,
+    jaw_joint: 0,
+  };
+
+  const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+  const assertDemoToken = (token: number) => {
+    if (demoRunTokenRef.current !== token) {
+      throw new Error(DEMO_STOPPED_ERROR);
+    }
+  };
+
+  const publishServoForDemo = async (id: number, angle: number, token: number, delay = 250) => {
+    assertDemoToken(token);
+    // Send to real robot if connected
+    if (isConnected) {
+      sendCommand({ id, angle });
+    }
+    // Also update 3D preview
+    const jointName = servoJointMapping[id];
+    if (jointName) {
+      const config = getServoConfig(id);
+      const urdfAngle = angle - config.default;
+      const radians = (urdfAngle * Math.PI) / 180;
+      updateJointState(jointName, radians);
+    }
+    await sleep(delay);
+    assertDemoToken(token);
+  };
+
+  const publishRobotCommand = (command: string) => {
+    if (isConnected && rosService?.isConnected()) {
+      rosService.publish('/robot_command', 'std_msgs/String', { data: command });
+      rosService.publish('/robot_function', 'std_msgs/String', { data: command });
+    }
+  };
+
+  const setDemoPose = async (pose: Record<string, number>, token?: number, delay = 500) => {
+    if (typeof token === 'number') assertDemoToken(token);
+    updateJointStates(pose);
+    await sleep(delay);
+    if (typeof token === 'number') assertDemoToken(token);
+  };
+
+  const returnToSafePose = async () => {
+    publishRobotCommand('home');
+    await setDemoPose(SAFE_POSE, undefined, 350);
+  };
+
+  const handleStopDemo = async () => {
+    if (demoStatus !== 'running') return;
+    demoRunTokenRef.current += 1;
+    setDemoStepText(t('demo.stopping', 'Stopping...'));
+    await returnToSafePose();
+    setDemoStatus('ready');
+    setActiveDemoId(null);
+    setDemoStepText(t('demo.ready', 'Ready'));
+  };
+
+  interface DemoAction {
+    id: string;
+    title: string;
+    description: string;
+    icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+    run: (token: number) => Promise<void>;
+  }
+
+  const demos: DemoAction[] = useMemo(() => {
+    const raisedPose = {
+      r_shoulder_out_joint: -0.10,
+      r_shoulder_lift_joint: -1.10,
+      r_upper_arm_roll_joint: 0.0,
+      r_elbow_flex_joint: -1.57,
+      r_wrist_roll_joint: 0.0,
+    };
+    const waveLeft = {
+      ...raisedPose,
+      r_shoulder_out_joint: -0.12,
+      r_upper_arm_roll_joint: 0.12,
+    };
+    const waveRight = {
+      ...raisedPose,
+      r_shoulder_out_joint: -0.32,
+      r_upper_arm_roll_joint: -0.12,
+    };
+
+    return [
+    {
+      id: 'full',
+      title: t('demo.fullTitle', 'Full Presentation'),
+      description: t('demo.fullDesc', 'Complete demo: intro, head movement, wave, vision'),
+      icon: PlayIcon,
+      run: async (token: number) => {
+        setDemoStepText(t('demo.stepIntro', 'Introduction...'));
+        publishRobotCommand('presentation_intro');
+        await setDemoPose({ head_tilt_joint: 0.2 }, token, 1500);
+        await setDemoPose({ head_tilt_joint: 0 }, token, 1000);
+
+        setDemoStepText(t('demo.stepHead', 'Head movement...'));
+        await setDemoPose({ head_pan_joint: 0.5 }, token, 1200);
+        await setDemoPose({ head_pan_joint: -0.5 }, token, 1200);
+        await setDemoPose({ head_pan_joint: 0 }, token, 1000);
+
+        setDemoStepText(t('demo.stepWave', 'Waving...'));
+        publishRobotCommand('tete_centre');
+        await setDemoPose(raisedPose, token, 1500);
+        await setDemoPose(waveLeft, token, 600);
+        await setDemoPose(waveRight, token, 600);
+        await setDemoPose(waveLeft, token, 600);
+        await setDemoPose(waveRight, token, 600);
+        await setDemoPose(raisedPose, token, 800);
+
+        setDemoStepText(t('demo.stepVision', 'Activating vision...'));
+        if (isConnected && rosService?.isConnected()) {
+          rosService.publish('/axel/vision/mode', 'std_msgs/String', { data: 'face_tracking' });
+        }
+        await sleep(1500);
+        assertDemoToken(token);
+
+        setDemoStepText(t('demo.stepRest', 'Returning to rest...'));
+        await setDemoPose(SAFE_POSE, token, 1500);
+      },
+    },
+    {
+      id: 'hello',
+      title: t('demo.helloTitle', 'Hello'),
+      description: t('demo.helloDesc', 'Simple greeting with eyebrow movement'),
+      icon: MicrophoneIcon,
+      run: async (token: number) => {
+        publishRobotCommand('presentation_hello');
+        await setDemoPose({ head_tilt_joint: 0.3, r_shoulder_lift_joint: -0.3 }, token, 1200);
+        await setDemoPose({ head_tilt_joint: 0, r_shoulder_lift_joint: 0 }, token, 1200);
+      },
+    },
+    {
+      id: 'wave',
+      title: t('demo.waveTitle', 'Wave'),
+      description: t('demo.waveDesc', 'Friendly waving gesture'),
+      icon: HandRaisedIcon,
+      run: async (token: number) => {
+        publishRobotCommand('salam');
+        await setDemoPose(raisedPose, token, 1500);
+        await setDemoPose(waveLeft, token, 600);
+        await setDemoPose(waveRight, token, 600);
+        await setDemoPose(waveLeft, token, 600);
+        await setDemoPose(waveRight, token, 600);
+        await setDemoPose(raisedPose, token, 800);
+        await setDemoPose(SAFE_POSE, token, 1200);
+      },
+    },
+    {
+      id: 'look_around',
+      title: t('demo.lookAroundTitle', 'Look Around'),
+      description: t('demo.lookAroundDesc', 'Scan the environment'),
+      icon: EyeIcon,
+      run: async (token: number) => {
+        publishRobotCommand('look_left');
+        await setDemoPose({ head_pan_joint: 0.6, head_tilt_joint: 0.1 }, token, 1200);
+        await setDemoPose({ head_pan_joint: 0.6, head_tilt_joint: -0.1 }, token, 1000);
+        
+        publishRobotCommand('look_right');
+        await setDemoPose({ head_pan_joint: -0.6, head_tilt_joint: -0.1 }, token, 1500);
+        await setDemoPose({ head_pan_joint: -0.6, head_tilt_joint: 0.1 }, token, 1000);
+        
+        publishRobotCommand('tete_centre');
+        await setDemoPose({ head_pan_joint: 0, head_tilt_joint: 0 }, token, 1200);
+      },
+    },
+    {
+      id: 'joy',
+      title: t('demo.joyTitle', 'Joy / Celebration'),
+      description: t('demo.joyDesc', 'A happy celebration gesture'),
+      icon: SparklesIcon,
+      run: async (token: number) => {
+        const armsUp = {
+          r_shoulder_lift_joint: -1.3,
+          r_shoulder_out_joint: -0.2,
+          r_elbow_flex_joint: -0.5,
+          l_shoulder_lift_joint: -1.3,
+          l_shoulder_out_joint: 0.2,
+          l_elbow_flex_joint: -0.5,
+          head_tilt_joint: -0.3,
+        };
+        const armsOut = {
+          ...armsUp,
+          r_shoulder_out_joint: -0.6,
+          l_shoulder_out_joint: 0.6,
+          head_tilt_joint: -0.1,
+        };
+        
+        publishRobotCommand('joy'); // or similar
+        await setDemoPose(armsUp, token, 1200);
+        await setDemoPose(armsOut, token, 600);
+        await setDemoPose(armsUp, token, 600);
+        await setDemoPose(armsOut, token, 600);
+        await setDemoPose(armsUp, token, 600);
+        
+        await setDemoPose(SAFE_POSE, token, 1500);
+      },
+    },
+    {
+      id: 'vision',
+      title: t('demo.visionTitle', 'Vision'),
+      description: t('demo.visionDesc', 'Activate face tracking'),
+      icon: CameraIcon,
+      run: async (token: number) => {
+        if (isConnected && rosService?.isConnected()) {
+          rosService.publish('/axel/vision/mode', 'std_msgs/String', { data: 'face_tracking' });
+        }
+        await sleep(900);
+        assertDemoToken(token);
+      },
+    },
+    {
+      id: 'rest',
+      title: t('demo.restTitle', 'Rest Position'),
+      description: t('demo.restDesc', 'Return robot to safe/home position'),
+      icon: HomeIcon,
+      run: async (token: number) => {
+        publishRobotCommand('home');
+        await setDemoPose(SAFE_POSE, token);
+      },
+    },
+  ];
+  }, [isConnected, rosService, t, sendCommand, updateJointState, updateJointStates]);
+
+  const runDemo = async (demo: DemoAction) => {
+    if (demoStatus === 'running') return;
+
+    setDemoStatus('running');
+    setActiveDemoId(demo.id);
+    setDemoStepText(`${t('demo.running', 'Running')}: ${demo.title}`);
+    demoRunTokenRef.current += 1;
+    const token = demoRunTokenRef.current;
+
+    try {
+      assertDemoToken(token);
+      await demo.run(token);
+      assertDemoToken(token);
+      setDemoStatus('done');
+      setDemoStepText(`${t('demo.done', 'Done')}: ${demo.title}`);
+    } catch (error) {
+      if (error instanceof Error && error.message === DEMO_STOPPED_ERROR) {
+        return;
+      }
+      console.error('[Demo] Demo failed:', error);
+      setDemoStatus('failed');
+      setDemoStepText(`${t('demo.failed', 'Failed')}: ${demo.title}`);
+    } finally {
+      if (demoRunTokenRef.current !== token) return;
+      window.setTimeout(() => {
+        if (demoRunTokenRef.current !== token) return;
+        setDemoStatus('ready');
+        setActiveDemoId(null);
+        setDemoStepText(t('demo.ready', 'Ready'));
+      }, 2200);
+    }
+  };
 
   // When fresh /joint_states arrive while online, clear preview overrides gradually.
   React.useEffect(() => {
@@ -179,14 +482,26 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
     handleServoChange(command.id, command.angle);
   };
 
-  const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+  const runGesture = async (gesture: 'salam' | 'home' | 'rest' | 'look_left' | 'look_right') => {
+    if (gestureRunning) return;
 
-  const runOfflineGesture = async (gesture: 'salam' | 'home' | 'rest' | 'look_left' | 'look_right') => {
-    if (isConnected) {
-      setGestureStatus('Offline gestures are disabled while ROS is connected');
+    if (isConnected && rosService?.isConnected()) {
+      const cmdMap: Record<string, string> = {
+        salam: 'salam',
+        home: 'home',
+        rest: 'rest',
+        look_left: 'look_left',
+        look_right: 'look_right'
+      };
+      const cmd = cmdMap[gesture];
+      if (cmd) {
+        rosService.publish('/robot_command', 'std_msgs/String', { data: cmd });
+        rosService.publish('/robot_function', 'std_msgs/String', { data: cmd });
+        setGestureStatus(`Sent command: ${cmd}`);
+        setTimeout(() => setGestureStatus(t('common.ready')), 1500);
+      }
       return;
     }
-    if (gestureRunning) return;
 
     setGestureRunning(true);
     try {
@@ -294,11 +609,11 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
           updateJointStates(rightHandInitial);
           break;
       }
-      setGestureStatus('Done');
+      setGestureStatus(t('common.done'));
     } catch (error) {
-      setGestureStatus('Gesture failed');
+      setGestureStatus(t('common.failed'));
     } finally {
-      window.setTimeout(() => setGestureStatus('Ready'), 1800);
+      window.setTimeout(() => setGestureStatus(t('common.ready')), 1800);
       setGestureRunning(false);
     }
   };
@@ -365,13 +680,13 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
   }, [convertedServoStates, jointStatesByName, offlineJointStates, isConnected, previewJointStatesOnline]);
 
   return (
-    <div className="p-6 h-full flex flex-col gap-6" style={{ background: 'var(--axel-bg)', color: 'var(--axel-text)' }}>
+    <div id="visualization-page-root" className="p-6 h-full flex flex-col gap-6" style={{ background: 'var(--axel-bg)', color: 'var(--axel-text)' }}>
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-4xl font-bold axel-gradient-text mb-2 tracking-tight">
-            3D Robot Visualization
+            {t('visual.title')}
           </h1>
-          <p className="axel-muted font-medium">Real-time visualization and control with interactive MoveIt features</p>
+          <p className="axel-muted font-medium">{t('visual.subtitle')}</p>
         </div>
         <div className="flex gap-2 items-center">
           <div
@@ -384,7 +699,7 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
             <span className="inline-flex items-center gap-2">
               <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400' : 'bg-rose-400'} ${isConnected ? 'animate-pulse' : ''}`} />
               <span className={isConnected ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300'}>
-                {isConnected ? 'Connected to ROS' : 'Offline mode'}
+                {isConnected ? t('visual.connected') : t('visual.offline')}
               </span>
             </span>
           </div>
@@ -401,7 +716,7 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
               onChange={(e) => setUseEnhancedVisualization(e.target.checked)}
               className="rounded text-cyan-500 focus:ring-cyan-500/50 cursor-pointer"
             />
-            <span className="text-sm font-semibold">Premium View</span>
+            <span className="text-sm font-semibold">{t('visual.premiumView')}</span>
           </label>
         </div>
       </div>
@@ -410,7 +725,7 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
         <div className="axel-card rounded-2xl p-4 flex items-center gap-3">
           <div className="w-2 h-2 rounded-full bg-blue-400 animate-ping"></div>
           <p className="font-medium" style={{ color: 'var(--axel-text)' }}>
-            <strong className="text-cyan-600 dark:text-cyan-300">Offline mode active:</strong> Control the robot in simulation by dragging parts or using sliders.
+            <strong className="text-cyan-600 dark:text-cyan-300">{t('visual.offlineActive')}</strong> {t('visual.offlineHint')}
           </p>
         </div>
       )}
@@ -428,6 +743,7 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
               showTF={showTF}
               showTrajectoryControls={true}
               onJointDrag={handleJointDrag}
+              onRunGesture={runGesture}
             />
           ) : (
             <RobotViewer
@@ -442,10 +758,10 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
         <div className="w-[380px] flex flex-col rounded-2xl axel-surface border overflow-hidden" style={{ borderColor: 'var(--axel-border)' }}>
           <div className="border-b p-4" style={{ borderColor: 'var(--axel-border)' }}>
             <div className="flex justify-between items-center mb-2">
-              <h2 className="text-base font-bold tracking-tight" style={{ color: 'var(--axel-text)' }}>Live Control</h2>
+              <h2 className="text-base font-bold tracking-tight" style={{ color: 'var(--axel-text)' }}>{t('visual.liveControl')}</h2>
               <div className="flex gap-3 text-[10px] axel-muted font-medium">
                 <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></div> {new Date(lastUpdate).toLocaleTimeString()}</span>
-                <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div> {Object.keys(servoStates).length} Servos</span>
+                <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div> {Object.keys(servoStates).length} {t('visual.servos')}</span>
               </div>
             </div>
 
@@ -454,47 +770,47 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
               className="w-full px-4 py-2 axel-button-secondary font-bold rounded-xl transition-all text-xs flex items-center justify-center gap-2 tracking-wide"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-              Reset All Servos
+              {t('visual.resetServos')}
             </button>
 
-            {!isConnected && (
+            {!isFullscreen && (
               <div className="mt-3 border-t border-slate-700/50 pt-3 space-y-2">
-                <p className="text-[10px] uppercase tracking-widest axel-muted">Offline Gestures</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => runOfflineGesture('salam')}
-                    disabled={gestureRunning}
+                <p className="text-[10px] uppercase tracking-widest axel-muted">Gestures</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => runGesture('salam')}
+                  disabled={gestureRunning}
                     className="px-2 py-2 rounded-lg text-xs font-bold text-white bg-cyan-700/80 hover:bg-cyan-600 disabled:opacity-60 disabled:cursor-not-allowed border border-cyan-500/30"
                   >
-                    Salam
+                    {t('visual.salam')}
                   </button>
                   <button
-                    onClick={() => runOfflineGesture('home')}
-                    disabled={gestureRunning}
+                  onClick={() => runGesture('home')}
+                  disabled={gestureRunning}
                     className="px-2 py-2 rounded-lg text-xs font-bold text-white bg-slate-700 hover:bg-slate-600 disabled:opacity-60 disabled:cursor-not-allowed border border-slate-500/40"
                   >
-                    Home
+                    {t('visual.home')}
                   </button>
                   <button
-                    onClick={() => runOfflineGesture('rest')}
-                    disabled={gestureRunning}
+                  onClick={() => runGesture('rest')}
+                  disabled={gestureRunning}
                     className="px-2 py-2 rounded-lg text-xs font-bold text-white bg-violet-700/80 hover:bg-violet-600 disabled:opacity-60 disabled:cursor-not-allowed border border-violet-500/30"
                   >
-                    Rest
+                    {t('visual.rest')}
                   </button>
                   <button
-                    onClick={() => runOfflineGesture('look_left')}
-                    disabled={gestureRunning}
+                  onClick={() => runGesture('look_left')}
+                  disabled={gestureRunning}
                     className="px-2 py-2 rounded-lg text-xs font-bold text-white bg-slate-700 hover:bg-slate-600 disabled:opacity-60 disabled:cursor-not-allowed border border-slate-500/40"
                   >
-                    Look Left
+                    {t('visual.lookLeft')}
                   </button>
                   <button
-                    onClick={() => runOfflineGesture('look_right')}
-                    disabled={gestureRunning}
+                  onClick={() => runGesture('look_right')}
+                  disabled={gestureRunning}
                     className="col-span-2 px-2 py-2 rounded-lg text-xs font-bold text-white bg-slate-700 hover:bg-slate-600 disabled:opacity-60 disabled:cursor-not-allowed border border-slate-500/40"
                   >
-                    Look Right
+                    {t('visual.lookRight')}
                   </button>
                 </div>
                 <p className="text-[11px] axel-muted">{gestureStatus}</p>
@@ -511,7 +827,7 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
                       onChange={(e) => setShowCollisions(e.target.checked)}
                       className="w-3 h-3 rounded text-cyan-500 focus:ring-cyan-500/50 bg-slate-900 border-slate-700 cursor-pointer"
                     />
-                    Collisions
+                    {t('visual.collisions')}
                   </label>
                   <label className="flex items-center gap-2 text-[10px] font-bold text-slate-400 cursor-pointer hover:text-white transition-colors bg-slate-800/50 p-1.5 rounded-lg border border-slate-700/50 hover:border-slate-500/70 uppercase tracking-tighter">
                     <input
@@ -555,10 +871,100 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
             >
               MODE
             </button>
+            <button
+              onClick={() => setActiveTab('demo')}
+              className={`flex-1 px-3 py-2.5 rounded-xl font-bold transition-all text-xs tracking-wider ${activeTab === 'demo'
+                  ? 'axel-button-primary text-white'
+                  : 'axel-button-secondary'
+                }`}
+            >
+              DEMO
+            </button>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {activeTab === 'mode' ? (
+            {activeTab === 'demo' ? (
+              <div className="h-full space-y-4">
+                {/* Demo Status */}
+                <div className={`rounded-xl border px-3 py-2.5 text-sm font-bold ${
+                  demoStatus === 'running' ? 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-200' :
+                  demoStatus === 'done' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200' :
+                  demoStatus === 'failed' ? 'border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-200' :
+                  'border-cyan-500/25 bg-cyan-500/10 text-cyan-700 dark:text-cyan-200'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    {demoStatus === 'running' ? (
+                      <span className="w-2 h-2 rounded-full bg-current animate-pulse" />
+                    ) : demoStatus === 'done' ? (
+                      <CheckCircleIcon className="w-5 h-5" />
+                    ) : demoStatus === 'failed' ? (
+                      <StopCircleIcon className="w-5 h-5" />
+                    ) : (
+                      <ShieldCheckIcon className="w-5 h-5" />
+                    )}
+                    <span>{demoStepText}</span>
+                  </div>
+                </div>
+
+                {/* Connection Status */}
+                <div className="p-3 rounded-xl border" style={{ background: 'var(--axel-surface-soft)', borderColor: 'var(--axel-border)' }}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs axel-muted uppercase tracking-wide">{t('demo.connection', 'Connection')}</span>
+                    <span className={`text-sm font-bold ${isConnected ? 'text-emerald-500' : 'text-amber-500'}`}>
+                      {isConnected ? t('common.connected', 'Connected') : t('demo.simulationOnly', 'Simulation Only')}
+                    </span>
+                  </div>
+                  <p className="text-xs axel-muted mt-1">
+                    {isConnected 
+                      ? t('demo.infoOnline', 'Demos will run on physical robot')
+                      : t('demo.infoOffline', 'Demos will preview in 3D visualization')
+                    }
+                  </p>
+                </div>
+
+                {/* Stop Button */}
+                {demoStatus === 'running' && (
+                  <button
+                    onClick={handleStopDemo}
+                    className="w-full px-4 py-2.5 rounded-xl text-sm font-bold border border-rose-500/25 text-rose-700 dark:text-rose-200 bg-rose-500/10 hover:bg-rose-500/15 transition-all"
+                  >
+                    {t('demo.stopDemo', 'Stop Demo')}
+                  </button>
+                )}
+
+                {/* Demo Actions */}
+                <div className="space-y-2">
+                  {demos.map((demo) => {
+                    const Icon = demo.icon;
+                    const active = activeDemoId === demo.id;
+                    return (
+                      <button
+                        key={demo.id}
+                        onClick={() => runDemo(demo)}
+                        disabled={demoStatus === 'running'}
+                        className={`w-full text-left p-3 rounded-xl border transition-all hover:-translate-y-0.5 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed ${
+                          active ? 'ring-2 ring-cyan-500/40 border-cyan-500/40' : ''
+                        }`}
+                        style={{ 
+                          background: 'var(--axel-surface-soft)', 
+                          borderColor: active ? undefined : 'var(--axel-border)'
+                        }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'var(--axel-surface)', border: '1px solid var(--axel-border)' }}>
+                            <Icon className="w-5 h-5 text-cyan-400" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h3 className="text-sm font-bold" style={{ color: 'var(--axel-text)' }}>{demo.title}</h3>
+                            <p className="text-xs axel-muted mt-0.5">{demo.description}</p>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : activeTab === 'mode' ? (
               <div className="h-full">
                 <ModeCard
                   onModeChange={onModeChange}
@@ -567,7 +973,7 @@ const Visualization3DPage: React.FC<Visualization3DPageProps> = ({
               </div>
             ) : activeTab === 'head' ? (
               <div className="space-y-3">
-                {headServoIds.map((servoId) => {
+                {headServoIds.filter(id => ![1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 13, 14, 15].includes(id)).map((servoId) => {
                   const config = getServoConfig(servoId);
                   // Prefer immediate UI value (optimistic) over ROS echo.
                   const optimistic = currentSliderValues[servoId];

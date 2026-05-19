@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { ROSState } from '../types';
+import { DEFAULT_ROSBRIDGE_URL } from '../services/ros-endpoint.service';
 
 declare global {
   interface Window {
@@ -7,11 +8,14 @@ declare global {
   }
 }
 
-export const useROS = (rosUrl = 'ws://localhost:9090') => {
+export const useROS = (rosUrl = DEFAULT_ROSBRIDGE_URL) => {
   const [state, setState] = useState<ROSState>({
     isConnected: false,
     rosUrl,
     error: null,
+    status: 'disconnected',
+    resolvedRosUrl: null,
+    lastAttemptedRosUrl: rosUrl,
   });
   
   const rosRef = useRef<any>(null);
@@ -41,6 +45,9 @@ export const useROS = (rosUrl = 'ws://localhost:9090') => {
           ...prev,
           isConnected: true,
           error: null,
+          status: 'connected',
+          resolvedRosUrl: rosUrl,
+          lastAttemptedRosUrl: rosUrl,
         }));
       });
 
@@ -49,6 +56,8 @@ export const useROS = (rosUrl = 'ws://localhost:9090') => {
           ...prev,
           isConnected: false,
           error: error.toString(),
+          status: 'connection_lost',
+          lastAttemptedRosUrl: rosUrl,
         }));
       });
 
@@ -56,12 +65,14 @@ export const useROS = (rosUrl = 'ws://localhost:9090') => {
         setState(prev => ({
           ...prev,
           isConnected: false,
+          status: prev.isConnected ? 'connection_lost' : 'disconnected',
         }));
       });
     } catch (error) {
       setState(prev => ({
         ...prev,
         error: error instanceof Error ? error.message : 'Unknown error',
+        status: 'disconnected',
       }));
     }
   };

@@ -21,12 +21,12 @@
 /* Theme toggle (used for Light Mode testing in Settings). */
 :root[data-theme='light'] {
   /* Softer, warmer light theme for comfort */
-  --axel-bg: #f3f6fb;
-  --axel-surface: #ffffff;
-  --axel-surface-soft: #eef3f9;
-  --axel-border: rgba(15, 23, 42, 0.10);
-  --axel-text: #0b1220;
-  --axel-muted: #4b5563;
+  --axel-bg: #f8f6f1;
+  --axel-surface: #fdfaf5;
+  --axel-surface-soft: #f2eee4;
+  --axel-border: rgba(15, 23, 42, 0.08);
+  --axel-text: #0f172a;
+  --axel-muted: #64748b;
 }
 
 * {
@@ -90,10 +90,21 @@ code {
     color: transparent;
   }
 
+  :root[data-theme='light'] .axel-gradient-text {
+    background-image: none;
+    -webkit-background-clip: initial;
+    background-clip: initial;
+    color: var(--axel-blue);
+  }
+
   .axel-button-primary {
     background: linear-gradient(90deg, var(--axel-blue), var(--axel-turquoise));
     color: #f8fafc;
     border: 1px solid rgba(57, 184, 164, 0.35);
+  }
+
+  :root[data-theme='light'] .axel-button-primary {
+    background: var(--axel-blue);
   }
 
   .axel-button-primary:hover {
@@ -113,12 +124,12 @@ code {
 
   /* Light theme overrides for shared surfaces/buttons */
   :root[data-theme='light'] .axel-surface {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(241, 245, 249, 0.92));
+    background: var(--axel-surface);
     border: 1px solid rgba(15, 23, 42, 0.12);
   }
 
   :root[data-theme='light'] .axel-card {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(241, 245, 249, 0.9));
+    background: var(--axel-surface);
     border: 1px solid rgba(15, 23, 42, 0.12);
     box-shadow: 0 10px 24px rgba(2, 6, 23, 0.08);
   }
@@ -181,7 +192,7 @@ code {
   }
 
   :root[data-theme='light'] .glass-card {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(241, 245, 249, 0.72));
+    background: var(--axel-surface);
     border: 1px solid rgba(15, 23, 42, 0.12);
     box-shadow: 0 10px 26px rgba(2, 6, 23, 0.10);
   }

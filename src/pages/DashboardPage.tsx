@@ -10,6 +10,7 @@ import {
 } from '@heroicons/react/24/outline';
 import EmergencyStopButton from '../components/shared/EmergencyStopButton';
 import { RobotState, ROSState, RobotMode } from '../types';
+import { useAppStore } from '../store/appStore';
 
 interface DashboardPageProps {
   rosState: ROSState;
@@ -28,6 +29,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
   emergencyStopRemote,
   currentMode,
 }) => {
+  const { t } = useAppStore();
   const [robotState, setRobotState] = useState<RobotState>({
     connected: rosState.isConnected,
     battery: 0,
@@ -61,8 +63,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
   return (
     <div className="p-6 space-y-6 min-h-screen" style={{ background: 'var(--axel-bg)' }}>
       <div className="mb-8">
-        <h1 className="text-4xl axel-title axel-gradient-text mb-2">AXEL Dashboard</h1>
-        <p className="axel-muted text-base">Real-time monitoring and intelligent control</p>
+        <h1 className="text-4xl axel-title axel-gradient-text mb-2">{t('dashboard.title')}</h1>
+        <p className="axel-muted text-base">{t('dashboard.subtitle')}</p>
       </div>
 
       <div className="grid grid-cols-2 gap-6">
@@ -75,20 +77,20 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
         >
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
-              <p className="axel-muted text-sm font-medium">ROS Connection</p>
+              <p className="axel-muted text-sm font-medium">{t('dashboard.rosConnection')}</p>
               <p
                 className="text-2xl font-bold mt-2"
                 style={{
                   color: rosState.isConnected ? 'rgba(57, 184, 164, 0.95)' : 'rgba(248, 113, 113, 0.95)',
                 }}
               >
-                {rosState.isConnected ? 'Connected' : 'Disconnected'}
+                {rosState.isConnected ? t('common.connected') : t('common.disconnected')}
               </p>
               <p className="text-xs axel-muted mt-1 truncate">{rosState.rosUrl}</p>
               {!rosState.isConnected && (
                 <p className="mt-3 text-xs axel-muted flex items-start gap-2">
                   <InformationCircleIcon className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" aria-hidden />
-                  <span>Reconnect from the sidebar.</span>
+                  <span>{t('dashboard.reconnectHint')}</span>
                 </p>
               )}
             </div>
@@ -117,17 +119,17 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
         >
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="axel-muted text-sm font-medium">Camera Feed</p>
+              <p className="axel-muted text-sm font-medium">{t('dashboard.cameraFeed')}</p>
               <p
                 className="text-2xl font-bold mt-2"
                 style={{
                   color: cameraConnected ? 'rgba(57, 184, 164, 0.95)' : 'rgba(248, 113, 113, 0.95)',
                 }}
               >
-                {cameraConnected ? 'Online' : 'Offline'}
+                {cameraConnected ? t('common.online') : t('common.offline')}
               </p>
               <p className="text-xs axel-muted mt-1">
-                {cameraConnected ? 'Stream active' : 'No feed'}
+                {cameraConnected ? t('dashboard.streamActive') : t('dashboard.noFeed')}
               </p>
             </div>
             <div
@@ -151,30 +153,30 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
         <div className="axel-card p-6">
           <h3 className="text-lg font-bold text-[color:var(--axel-text)] mb-4 flex items-center gap-2">
             <WrenchScrewdriverIcon className="w-5 h-5 shrink-0" style={{ color: 'rgba(57, 184, 164, 0.9)' }} aria-hidden />
-            System Status
+            {t('dashboard.systemStatus')}
           </h3>
 
           <div className="space-y-3">
             <div className="flex items-center justify-between p-3 rounded-xl border border-[color:var(--axel-border)] bg-[var(--axel-surface-soft)]">
-              <span className="axel-muted text-sm">Robot Mode</span>
+              <span className="axel-muted text-sm">{t('dashboard.robotMode')}</span>
               <span className="px-3 py-1 rounded-full text-sm font-semibold border border-cyan-500/25 bg-cyan-500/10 text-cyan-700 dark:text-cyan-200">
                 {currentMode}
               </span>
             </div>
 
             <div className="flex items-center justify-between p-3 rounded-xl border border-[color:var(--axel-border)] bg-[var(--axel-surface-soft)]">
-              <span className="axel-muted text-sm">Motor Status</span>
+              <span className="axel-muted text-sm">{t('dashboard.motorStatus')}</span>
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold border border-slate-500/20 bg-slate-500/10 text-[color:var(--axel-text)]">
                 {telemetryAvailable ? <CheckCircleIcon className="w-4 h-4" aria-hidden /> : null}
-                {telemetryAvailable ? 'Operational' : 'N/A'}
+                {telemetryAvailable ? t('dashboard.operational') : t('common.notAvailable')}
               </span>
             </div>
 
             <div className="flex items-center justify-between p-3 rounded-xl border border-[color:var(--axel-border)] bg-[var(--axel-surface-soft)]">
-              <span className="axel-muted text-sm">All Systems</span>
+              <span className="axel-muted text-sm">{t('dashboard.allSystems')}</span>
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold border border-slate-500/20 bg-slate-500/10 text-[color:var(--axel-text)]">
                 {telemetryAvailable ? <CheckCircleIcon className="w-4 h-4" aria-hidden /> : null}
-                {telemetryAvailable ? 'Operational' : 'N/A'}
+                {telemetryAvailable ? t('dashboard.operational') : t('common.notAvailable')}
               </span>
             </div>
           </div>
@@ -186,13 +188,13 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
           <div>
             <h3 className="text-lg font-bold text-[color:var(--axel-text)] mb-1 flex items-center gap-2">
               <StopCircleIcon className="w-5 h-5 text-rose-500 shrink-0" aria-hidden />
-              Emergency Stop
+              {t('dashboard.emergencyStop')}
             </h3>
-            <p className="text-sm axel-muted">Press to halt all motors immediately</p>
+            <p className="text-sm axel-muted">{t('dashboard.emergencyStopHint')}</p>
             {emergencyStopRemote !== undefined && (
               <p className="text-xs axel-muted mt-2 flex items-center gap-1.5">
                 <InformationCircleIcon className="w-3.5 h-3.5 shrink-0" aria-hidden />
-                State synced from ROS
+                {t('dashboard.stateSynced')}
               </p>
             )}
           </div>
@@ -209,26 +211,26 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="axel-card p-6 text-center transition-all">
           <div className="text-4xl font-bold axel-gradient-text mb-2">15</div>
-          <p className="axel-muted text-sm font-medium">Head servos</p>
-          <p className="text-xs axel-muted mt-1">Face / head</p>
+          <p className="axel-muted text-sm font-medium">{t('dashboard.headServos')}</p>
+          <p className="text-xs axel-muted mt-1">{t('dashboard.faceHead')}</p>
         </div>
 
         <div className="axel-card p-6 text-center transition-all">
           <div className="text-4xl font-bold axel-gradient-text mb-2">3</div>
-          <p className="axel-muted text-sm font-medium">Neck servos</p>
-          <p className="text-xs axel-muted mt-1">Motors</p>
+          <p className="axel-muted text-sm font-medium">{t('dashboard.neckServos')}</p>
+          <p className="text-xs axel-muted mt-1">{t('dashboard.motors')}</p>
         </div>
 
         <div className="axel-card p-6 text-center transition-all">
           <div className="text-4xl font-bold axel-gradient-text mb-2">20</div>
-          <p className="axel-muted text-sm font-medium">Arm servos</p>
-          <p className="text-xs axel-muted mt-1">10 per hand</p>
+          <p className="axel-muted text-sm font-medium">{t('dashboard.armServos')}</p>
+          <p className="text-xs axel-muted mt-1">{t('dashboard.perHand')}</p>
         </div>
 
         <div className="axel-card p-6 text-center transition-all">
           <div className="text-4xl font-bold axel-gradient-text mb-2">38</div>
-          <p className="axel-muted text-sm font-medium">Total servos</p>
-          <p className="text-xs axel-muted mt-1">Active</p>
+          <p className="axel-muted text-sm font-medium">{t('dashboard.totalServos')}</p>
+          <p className="text-xs axel-muted mt-1">{t('dashboard.active')}</p>
         </div>
       </div>
     </div>

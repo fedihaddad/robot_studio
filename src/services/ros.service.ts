@@ -7,6 +7,13 @@ import { ServoCommand, ROS2Topic } from '../types';
 import { timeSyncService } from './timeSynchronization.service';
 import { getServoConfig } from '../config/servoDegrees.config';
 
+type ROSServiceOptions = {
+  connectionTimeoutMs?: number;
+  debug?: boolean;
+  onClose?: () => void;
+  onError?: (error: unknown) => void;
+};
+
 declare global {
   interface Window {
     ROSLIB: any;
@@ -18,6 +25,8 @@ declare global {
 
 export class ROSService {
   private ros: any;
+  private readonly rosUrl: string;
+  private readonly options: ROSServiceOptions;
   private subscribers: Map<
     string,
     {
@@ -67,10 +76,17 @@ export class ROSService {
 
   private actionClients: Map<string, any> = new Map();
 
-  constructor(rosUrl: string) {
+  constructor(rosUrl: string, options: ROSServiceOptions = {}) {
     if (!window.ROSLIB) {
       throw new Error('ROSLIB not loaded');
     }
+
+    this.rosUrl = rosUrl;
+    this.options = {
+      connectionTimeoutMs: 4000,
+      debug: true,
+      ...options,
+    };
 
     this.ros = new window.ROSLIB.Ros({
       url: rosUrl,
@@ -79,14 +95,45 @@ export class ROSService {
 
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
+      let settled = false;
+      const timeoutHandle = window.setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        this.debug('Connection timeout');
+        try {
+          this.ros.close();
+        } catch {
+          // ignore
+        }
+        this.isConnectedFlag = false;
+        reject(new Error(`Timeout connecting to ROSBridge at ${this.rosUrl}`));
+      }, this.options.connectionTimeoutMs);
+
       this.ros.on('connection', () => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeoutHandle);
         this.isConnectedFlag = true;
+        this.debug('Connected');
         resolve();
       });
-      this.ros.on('error', reject);
+      this.ros.on('error', (error: unknown) => {
+        this.debug('Connection error', error);
+        this.options.onError?.(error);
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeoutHandle);
+        this.isConnectedFlag = false;
+        reject(error instanceof Error ? error : new Error(String(error)));
+      });
       this.ros.on('close', () => {
         this.isConnectedFlag = false;
-        reject(new Error('Connection closed'));
+        this.debug('Connection closed');
+        this.options.onClose?.();
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeoutHandle);
+        reject(new Error(`Connection closed for ${this.rosUrl}`));
       });
     });
   }
@@ -96,6 +143,7 @@ export class ROSService {
   }
 
   disconnect(): void {
+    this.debug('Disconnect requested');
     this.subscribers.forEach((entry) => entry.topic.unsubscribe());
     this.subscribers.clear();
     this.publishers.forEach(pub => pub.unsubscribe());
@@ -104,6 +152,19 @@ export class ROSService {
     this.actionClients.clear();
     if (this.ros) {
       this.ros.close();
+    }
+  }
+
+  getUrl(): string {
+    return this.rosUrl;
+  }
+
+  private debug(message: string, data?: unknown): void {
+    if (!this.options.debug) return;
+    if (data !== undefined) {
+      console.debug(`[ROSService] ${message} (${this.rosUrl})`, data);
+    } else {
+      console.debug(`[ROSService] ${message} (${this.rosUrl})`);
     }
   }
 

@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import ServoSlider from '../components/shared/ServoSlider';
 import IKControlPanel from '../components/shared/IKControlPanel';
 import { ServoCommand, ServoPreset, IKSolution } from '../types';
+import { useAppStore } from '../store/appStore';
 
 interface ServoPageProps {
   onServoCommand: (command: ServoCommand) => void;
 }
 
 const ServoPage: React.FC<ServoPageProps> = ({ onServoCommand }) => {
+  const { t } = useAppStore();
   // Head servos: 15 servos for various head movements
   const [headServos, setHeadServos] = useState<Record<number, number>>({
     1: 90, 2: 90, 3: 90, 4: 90, 5: 90,      // Pan/tilt, eye blinks
@@ -28,8 +30,8 @@ const ServoPage: React.FC<ServoPageProps> = ({ onServoCommand }) => {
 
   const presets: Record<string, ServoPreset> = {
     neutral: {
-      name: 'Neutral',
-      description: 'Default resting position',
+      name: t('servo.neutral'),
+      description: t('servo.neutralDesc'),
       positions: new Map(
         Object.entries({
           1: 90, 2: 90, 3: 90, 4: 90, 5: 90,
@@ -41,16 +43,16 @@ const ServoPage: React.FC<ServoPageProps> = ({ onServoCommand }) => {
       ),
     },
     wave: {
-      name: 'Wave',
-      description: 'Friendly waving gesture',
+      name: t('servo.wave'),
+      description: t('servo.waveDesc'),
       positions: new Map([
         [16, 45], [17, 60], [18, 75], [19, 90], [20, 90],
         [21, 135], [22, 120], [23, 105], [24, 90], [25, 90],
       ]),
     },
     lookLeft: {
-      name: 'Look Left',
-      description: 'Head turned left',
+      name: t('servo.lookLeft'),
+      description: t('servo.lookLeftDesc'),
       positions: new Map(
         Array.from({ length: 25 }, (_, i) => [
           i + 1,
@@ -59,8 +61,8 @@ const ServoPage: React.FC<ServoPageProps> = ({ onServoCommand }) => {
       ),
     },
     lookRight: {
-      name: 'Look Right',
-      description: 'Head turned right',
+      name: t('servo.lookRight'),
+      description: t('servo.lookRightDesc'),
       positions: new Map(
         Array.from({ length: 25 }, (_, i) => [
           i + 1,
@@ -152,14 +154,14 @@ const ServoPage: React.FC<ServoPageProps> = ({ onServoCommand }) => {
       {/* Header */}
       <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-4xl font-extrabold axel-gradient-text mb-2">Servo Control</h1>
-          <p className="axel-muted">Individual servo angle control and presets</p>
+          <h1 className="text-4xl font-extrabold axel-gradient-text mb-2">{t('servo.title')}</h1>
+          <p className="axel-muted">{t('servo.subtitle')}</p>
         </div>
       </div>
 
       {/* Control Mode Toggle */}
       <div className="axel-surface rounded-2xl p-4 border" style={{ borderColor: 'var(--axel-border)' }}>
-        <h3 className="text-sm font-extrabold mb-3" style={{ color: 'var(--axel-text)' }}>Control Mode</h3>
+        <h3 className="text-sm font-extrabold mb-3" style={{ color: 'var(--axel-text)' }}>{t('servo.controlMode')}</h3>
         <div className="flex gap-2">
           <button
             onClick={() => setIkMode('direct')}
@@ -169,7 +171,7 @@ const ServoPage: React.FC<ServoPageProps> = ({ onServoCommand }) => {
                 : 'axel-button-secondary'
             }`}
           >
-            Direct Servo Control
+            {t('servo.direct')}
           </button>
           <button
             onClick={() => setIkMode('inverse_kinematics')}
@@ -179,7 +181,7 @@ const ServoPage: React.FC<ServoPageProps> = ({ onServoCommand }) => {
                 : 'axel-button-secondary'
             }`}
           >
-            Inverse Kinematics
+            {t('servo.ik')}
           </button>
         </div>
       </div>
@@ -205,7 +207,7 @@ const ServoPage: React.FC<ServoPageProps> = ({ onServoCommand }) => {
           {/* Head Servos */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <h2 className="text-2xl font-extrabold" style={{ color: 'var(--axel-text)' }}>Head Servos</h2>
+              <h2 className="text-2xl font-extrabold" style={{ color: 'var(--axel-text)' }}>{t('servo.headServos')}</h2>
               <span className="text-sm axel-muted">(15 servos)</span>
             </div>
 
@@ -214,7 +216,7 @@ const ServoPage: React.FC<ServoPageProps> = ({ onServoCommand }) => {
                 <ServoSlider
                   key={id}
                   id={id}
-                  label="Servo"
+                  label={t('servo.servo')}
                   value={headServos[id] || 90}
                   onChange={(value) => handleHeadServoChange(id, value)}
                 />
@@ -225,20 +227,20 @@ const ServoPage: React.FC<ServoPageProps> = ({ onServoCommand }) => {
           {/* Arm Servos - Direct */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <h2 className="text-2xl font-extrabold" style={{ color: 'var(--axel-text)' }}>Arm Servos</h2>
+              <h2 className="text-2xl font-extrabold" style={{ color: 'var(--axel-text)' }}>{t('servo.armServos')}</h2>
               <span className="text-sm axel-muted">(10 servos)</span>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               {/* Left Arm */}
               <div>
-                <h3 className="text-sm font-extrabold mb-2 text-cyan-600 dark:text-cyan-300">Left Arm</h3>
+                <h3 className="text-sm font-extrabold mb-2 text-cyan-600 dark:text-cyan-300">{t('servo.leftArm')}</h3>
                 <div className="space-y-2">
                   {Array.from({ length: 5 }, (_, i) => 16 + i).map((id) => (
                     <ServoSlider
                       key={id}
                       id={id}
-                      label="Left"
+                      label={t('servo.left')}
                       value={armServos[id] || 90}
                       onChange={(value) => handleArmServoChange(id, value)}
                     />
@@ -248,13 +250,13 @@ const ServoPage: React.FC<ServoPageProps> = ({ onServoCommand }) => {
 
               {/* Right Arm */}
               <div>
-                <h3 className="text-sm font-extrabold mb-2 text-emerald-600 dark:text-emerald-300">Right Arm</h3>
+                <h3 className="text-sm font-extrabold mb-2 text-emerald-600 dark:text-emerald-300">{t('servo.rightArm')}</h3>
                 <div className="space-y-2">
                   {Array.from({ length: 5 }, (_, i) => 21 + i).map((id) => (
                     <ServoSlider
                       key={id}
                       id={id}
-                      label="Right"
+                      label={t('servo.right')}
                       value={armServos[id] || 90}
                       onChange={(value) => handleArmServoChange(id, value)}
                     />
@@ -286,18 +288,18 @@ const ServoPage: React.FC<ServoPageProps> = ({ onServoCommand }) => {
 
       {/* Quick Info */}
       <div className="axel-surface rounded-2xl p-6 border" style={{ borderColor: 'var(--axel-border)' }}>
-        <h3 className="text-lg font-extrabold mb-3" style={{ color: 'var(--axel-text)' }}>Servo Information</h3>
+        <h3 className="text-lg font-extrabold mb-3" style={{ color: 'var(--axel-text)' }}>{t('servo.info')}</h3>
         <div className="grid grid-cols-3 gap-4 text-sm">
           <div>
-            <p className="axel-muted">Head Servos</p>
+            <p className="axel-muted">{t('servo.headServos')}</p>
             <p className="text-xl font-extrabold text-cyan-600 dark:text-cyan-300">15x MG90/MG90S</p>
           </div>
           <div>
-            <p className="axel-muted">Arm Servos</p>
+            <p className="axel-muted">{t('servo.armServos')}</p>
             <p className="text-xl font-extrabold text-emerald-600 dark:text-emerald-300">10x MG996R</p>
           </div>
           <div>
-            <p className="axel-muted">Control Interface</p>
+            <p className="axel-muted">{t('servo.controlInterface')}</p>
             <p className="text-xl font-extrabold text-amber-600 dark:text-amber-300">2x PCA9685</p>
           </div>
         </div>

@@ -2,6 +2,7 @@
  * Configuration Utility
  * Centralized configuration for environment variables and settings
  */
+import { DEFAULT_ROSBRIDGE_HOSTNAME, DEFAULT_ROSBRIDGE_URL } from './ros-endpoint.service';
 
 export interface AppConfig {
   // ROS Configuration
@@ -58,7 +59,7 @@ class Configuration {
   private loadConfig(): AppConfig {
     return {
       ros: {
-        bridgeUrl: import.meta.env.VITE_ROS_BRIDGE_URL || 'ws://  :9090',
+        bridgeUrl: import.meta.env.VITE_ROS_BRIDGE_URL || DEFAULT_ROSBRIDGE_URL,
         topics: {
           servoCommand: import.meta.env.VITE_SERVO_COMMAND_TOPIC || '/servo/cmd',
           servoState: import.meta.env.VITE_SERVO_STATE_TOPIC || '/servo/state',
@@ -72,11 +73,11 @@ class Configuration {
         },
       },
       raspberryPi: {
-        host: import.meta.env.VITE_RASPBERRY_PI_HOST || '192.168.1.100',
+        host: import.meta.env.VITE_RASPBERRY_PI_HOST || DEFAULT_ROSBRIDGE_HOSTNAME,
         port: parseInt(import.meta.env.VITE_RASPBERRY_PI_PORT || '8080'),
       },
       camera: {
-        streamUrl: import.meta.env.VITE_CAMERA_STREAM_URL || 'http://192.168.1.100:8080/?action=stream',
+        streamUrl: import.meta.env.VITE_CAMERA_STREAM_URL || `http://${DEFAULT_ROSBRIDGE_HOSTNAME}:8080/?action=stream`,
         enabled: import.meta.env.VITE_CAMERA_ENABLED === 'true',
       },
       simulation: {

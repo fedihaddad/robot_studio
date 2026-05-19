@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { IKTarget, Vector3, IKSolution } from '../../types';
 import { ikSolver } from '../../services/inverseKinematics.service';
+import { useAppStore } from '../../store/appStore';
 
 interface IKControlPanelProps {
   armName: 'left_arm' | 'right_arm';
@@ -21,6 +22,7 @@ const IKControlPanel: React.FC<IKControlPanelProps> = ({
 
   const [solution, setSolution] = useState<IKSolution | null>(null);
   const [workspaceVisualization, setWorkspaceVisualization] = useState<string>('');
+  const { t } = useAppStore();
 
   // Calculate IK whenever target changes
   useEffect(() => {
@@ -66,14 +68,14 @@ const IKControlPanel: React.FC<IKControlPanelProps> = ({
   return (
     <div className="axel-surface rounded-2xl p-6 border" style={{ borderColor: 'var(--axel-border)', color: 'var(--axel-text)' }}>
       <h3 className="text-lg font-extrabold mb-4" style={{ color: 'var(--axel-text)' }}>
-        {armName === 'left_arm' ? 'Left Arm IK Control' : 'Right Arm IK Control'}
+        {armName === 'left_arm' ? t('ik.leftArm') : t('ik.rightArm')}
       </h3>
 
       {/* Target Position Input */}
       <div className="space-y-3 mb-6">
         <div>
           <label className="block text-sm font-semibold mb-2" style={{ color: 'var(--axel-text)' }}>
-            X Position: {target.x.toFixed(1)} mm
+            {t('ik.xPos')}: {target.x.toFixed(1)} mm
           </label>
           <input
             type="range"
@@ -90,7 +92,7 @@ const IKControlPanel: React.FC<IKControlPanelProps> = ({
 
         <div>
           <label className="block text-sm font-semibold mb-2" style={{ color: 'var(--axel-text)' }}>
-            Y Position: {target.y.toFixed(1)} mm
+            {t('ik.yPos')}: {target.y.toFixed(1)} mm
           </label>
           <input
             type="range"
@@ -107,7 +109,7 @@ const IKControlPanel: React.FC<IKControlPanelProps> = ({
 
         <div>
           <label className="block text-sm font-semibold mb-2" style={{ color: 'var(--axel-text)' }}>
-            Z Position: {target.z.toFixed(1)} mm
+            {t('ik.zPos')}: {target.z.toFixed(1)} mm
           </label>
           <input
             type="range"
@@ -125,8 +127,8 @@ const IKControlPanel: React.FC<IKControlPanelProps> = ({
 
       {/* Position Display */}
       <div className="rounded-2xl p-4 mb-6 text-sm font-mono border" style={{ background: 'var(--axel-surface-soft)', borderColor: 'var(--axel-border)' }}>
-        <div>Target: ({target.x.toFixed(0)}, {target.y.toFixed(0)}, {target.z.toFixed(0)}) mm</div>
-        <div className="text-xs axel-muted mt-1">Cartesian coordinates</div>
+        <div>{t('ik.target')}: ({target.x.toFixed(0)}, {target.y.toFixed(0)}, {target.z.toFixed(0)}) mm</div>
+        <div className="text-xs axel-muted mt-1">{t('ik.cartesian')}</div>
       </div>
 
       {/* IK Solution Status */}
@@ -143,15 +145,15 @@ const IKControlPanel: React.FC<IKControlPanelProps> = ({
               {solution.valid ? '✓' : '✕'}
             </span>
             <span className={`font-extrabold ${solution.valid ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300'}`}>
-              {solution.valid ? 'Reachable' : 'Unreachable'}
+              {solution.valid ? t('ik.reachable') : t('ik.unreachable')}
             </span>
           </div>
 
           {solution.valid ? (
             <div className="text-sm space-y-1" style={{ color: 'var(--axel-text)' }}>
-              <div>Shoulder: {solution.angles.shoulder.toFixed(1)}°</div>
-              <div>Elbow: {solution.angles.elbow.toFixed(1)}°</div>
-              {solution.angles.wrist && <div>Wrist: {solution.angles.wrist.toFixed(1)}°</div>}
+              <div>{t('ik.shoulder')}: {solution.angles.shoulder.toFixed(1)}°</div>
+              <div>{t('ik.elbow')}: {solution.angles.elbow.toFixed(1)}°</div>
+              {solution.angles.wrist && <div>{t('ik.wrist')}: {solution.angles.wrist.toFixed(1)}°</div>}
             </div>
           ) : (
             <div className="text-sm" style={{ color: 'var(--axel-text)' }}>{solution.error}</div>
@@ -166,28 +168,28 @@ const IKControlPanel: React.FC<IKControlPanelProps> = ({
           disabled={isExecuting}
           className="axel-button-secondary px-3 py-2 rounded-xl text-sm font-bold transition-colors disabled:opacity-50"
         >
-          Home
+          {t('ik.home')}
         </button>
         <button
           onClick={() => handlePreset('reach_forward')}
           disabled={isExecuting}
           className="axel-button-secondary px-3 py-2 rounded-xl text-sm font-bold transition-colors disabled:opacity-50"
         >
-          Forward
+          {t('ik.forward')}
         </button>
         <button
           onClick={() => handlePreset('reach_up')}
           disabled={isExecuting}
           className="axel-button-secondary px-3 py-2 rounded-xl text-sm font-bold transition-colors disabled:opacity-50"
         >
-          Reach Up
+          {t('ik.reachUp')}
         </button>
         <button
           onClick={() => handlePreset('reach_side')}
           disabled={isExecuting}
           className="axel-button-secondary px-3 py-2 rounded-xl text-sm font-bold transition-colors disabled:opacity-50"
         >
-          Side Reach
+          {t('ik.sideReach')}
         </button>
       </div>
 
@@ -197,11 +199,11 @@ const IKControlPanel: React.FC<IKControlPanelProps> = ({
         disabled={!solution?.valid || isExecuting}
         className="w-full px-4 py-3 axel-button-primary text-white disabled:opacity-50 rounded-xl font-extrabold transition-colors"
       >
-        {isExecuting ? 'Executing…' : 'Execute IK Solution'}
+        {isExecuting ? t('ik.executing') : t('ik.executeSolution')}
       </button>
 
       <p className="text-xs axel-muted mt-3">
-        Drag sliders to set target position. System calculates joint angles automatically.
+        {t('ik.dragHint')}
       </p>
     </div>
   );

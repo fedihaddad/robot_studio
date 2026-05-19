@@ -13,7 +13,7 @@ interface ControlModePageProps {
 }
 
 const ControlModePage: React.FC<ControlModePageProps> = ({ onModeChange, isConnected = true }) => {
-  const { currentMode, setCurrentMode, saveModePreference } = useAppStore();
+  const { currentMode, setCurrentMode, saveModePreference, t } = useAppStore();
   const [isChanging, setIsChanging] = useState(false);
   const [voiceState, setVoiceState] = useState<'idle' | 'listening' | 'thinking' | 'speaking'>('idle');
   const [isAudioActive, setIsAudioActive] = useState(false);
@@ -187,8 +187,8 @@ const ControlModePage: React.FC<ControlModePageProps> = ({ onModeChange, isConne
       {/* Top Header */}
       <div className="relative z-10 flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-4xl font-extrabold axel-gradient-text drop-shadow-sm">Live Axel</h1>
-          <p className="axel-muted font-medium">Voice-activated robot control & operational modes</p>
+          <h1 className="text-4xl font-extrabold axel-gradient-text drop-shadow-sm">{t('control.title')}</h1>
+          <p className="axel-muted font-medium">{t('control.subtitle')}</p>
         </div>
         <div className={`px-4 py-2 rounded-xl font-bold border backdrop-blur-md ${
           isConnected ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border-emerald-500/20' : 'bg-rose-500/10 text-rose-600 dark:text-rose-300 border-rose-500/20'
@@ -219,7 +219,7 @@ const ControlModePage: React.FC<ControlModePageProps> = ({ onModeChange, isConne
           <div className="absolute top-6 left-6 flex items-center gap-2">
              <div className={`w-2 h-2 rounded-full ${isAudioActive ? 'bg-cyan-500 animate-pulse' : 'bg-slate-400'}`}></div>
              <span className="text-[10px] font-bold axel-muted uppercase tracking-widest">
-               {voiceState === 'idle' ? 'Ready to listen' : `System: ${voiceState.toUpperCase()}`}
+               {voiceState === 'idle' ? t('control.readyToListen') : `${t('control.system')}: ${voiceState.toUpperCase()}`}
              </span>
           </div>
 
@@ -227,10 +227,10 @@ const ControlModePage: React.FC<ControlModePageProps> = ({ onModeChange, isConne
 
           <div className="mt-8 text-center max-w-md">
             <h2 className="text-3xl font-extrabold mb-2 tracking-tight" style={{ color: 'var(--axel-text)' }}>
-              {voiceState === 'idle' && "AXEL is standby"}
-              {voiceState === 'listening' && "AXEL is listening..."}
-              {voiceState === 'thinking' && "AXEL is processing..."}
-              {voiceState === 'speaking' && "AXEL is responding..."}
+              {voiceState === 'idle' && t('control.standby')}
+              {voiceState === 'listening' && t('control.listening')}
+              {voiceState === 'thinking' && t('control.thinking')}
+              {voiceState === 'speaking' && t('control.speaking')}
             </h2>
             
             {/* Tool call indicator */}
@@ -255,12 +255,12 @@ const ControlModePage: React.FC<ControlModePageProps> = ({ onModeChange, isConne
                   {isAudioActive ? (
                      <>
                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                       <span>Stop Listening</span>
+                       <span>{t('control.stopListening')}</span>
                      </>
                   ) : (
                      <>
                        <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
-                       <span>Start AI Voice Mode</span>
+                       <span>{t('control.startVoice')}</span>
                      </>
                   )}
                 </div>
@@ -279,7 +279,7 @@ const ControlModePage: React.FC<ControlModePageProps> = ({ onModeChange, isConne
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                     </svg>
-                    <span>{isVideoActive ? 'Stop Vision' : 'Enable Vision'}</span>
+                    <span>{isVideoActive ? t('control.stopVision') : t('control.enableVision')}</span>
                   </div>
                 </button>
               )}
@@ -298,10 +298,10 @@ const ControlModePage: React.FC<ControlModePageProps> = ({ onModeChange, isConne
                <ModeIcon iconName={modeCapabilities.icon} className="w-24 h-24" />
              </div>
              <div className="relative z-10">
-               <span className="text-[10px] font-bold axel-muted uppercase tracking-widest mb-2 block">Active Configuration</span>
+               <span className="text-[10px] font-bold axel-muted uppercase tracking-widest mb-2 block">{t('control.activeConfiguration')}</span>
                <div className="flex items-center gap-3 mb-3">
                  <ModeIcon iconName={modeCapabilities.icon} className="w-10 h-10 text-cyan-600 dark:text-cyan-300" />
-                 <h3 className="text-2xl font-extrabold text-cyan-600 dark:text-cyan-300">{modeCapabilities.label}</h3>
+                 <h3 className="text-2xl font-extrabold text-cyan-600 dark:text-cyan-300">{t(`mode.${currentMode}.label`, modeCapabilities.label)}</h3>
                </div>
                <p className="text-sm leading-relaxed axel-muted">
                  {modeCapabilities.description}
@@ -311,7 +311,7 @@ const ControlModePage: React.FC<ControlModePageProps> = ({ onModeChange, isConne
 
           {/* Mode Selection List */}
           <div className="space-y-3">
-            <h4 className="text-sm font-bold axel-muted uppercase tracking-widest pl-2">Available Modes</h4>
+            <h4 className="text-sm font-bold axel-muted uppercase tracking-widest pl-2">{t('control.availableModes')}</h4>
             {Object.values(ROBOT_MODES).map((mode) => {
               const isActive = mode.mode === currentMode;
               return (
@@ -329,7 +329,7 @@ const ControlModePage: React.FC<ControlModePageProps> = ({ onModeChange, isConne
                        <ModeIcon iconName={mode.icon} className={`w-6 h-6 ${isActive ? 'text-cyan-600 dark:text-cyan-300' : 'text-slate-400'}`} />
                     </div>
                     <div>
-                      <p className={`font-extrabold ${isActive ? 'text-[color:var(--axel-text)]' : 'text-[color:var(--axel-text)]'}`}>{mode.label}</p>
+                      <p className={`font-extrabold ${isActive ? 'text-[color:var(--axel-text)]' : 'text-[color:var(--axel-text)]'}`}>{t(`mode.${mode.mode}.label`, mode.label)}</p>
                       <p className="text-xs axel-muted">{mode.description.substring(0, 40)}...</p>
                     </div>
                   </div>

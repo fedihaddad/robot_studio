@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ROS2Topic } from '../types';
+import { useAppStore } from '../store/appStore';
 
 interface RosMonitorPageProps {
   topics: ROS2Topic[];
@@ -7,6 +8,7 @@ interface RosMonitorPageProps {
 }
 
 const RosMonitorPage: React.FC<RosMonitorPageProps> = ({ topics, isLoading }) => {
+  const { t } = useAppStore();
   const [expandedTopic, setExpandedTopic] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('');
 
@@ -49,25 +51,25 @@ const RosMonitorPage: React.FC<RosMonitorPageProps> = ({ topics, isLoading }) =>
     <div className="p-6 md:p-8 space-y-6" style={{ background: 'var(--axel-bg)', color: 'var(--axel-text)' }}>
       {/* Header */}
       <div>
-        <h1 className="text-4xl font-extrabold axel-gradient-text mb-2">ROS2 Monitor</h1>
-        <p className="axel-muted">Real-time topic monitoring and data inspection</p>
+        <h1 className="text-4xl font-extrabold axel-gradient-text mb-2">{t('ros.title')}</h1>
+        <p className="axel-muted">{t('ros.subtitle')}</p>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
         <div className="axel-surface rounded-2xl p-4 border text-center" style={{ borderColor: 'var(--axel-border)' }}>
           <p className="text-3xl font-extrabold text-cyan-600 dark:text-cyan-300">{topics.length}</p>
-          <p className="text-sm axel-muted">Total Topics</p>
+          <p className="text-sm axel-muted">{t('ros.totalTopics')}</p>
         </div>
-        <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 text-center">
-          <p className="text-3xl font-bold text-green-400">{priorityTopics.length}</p>
-          <p className="text-sm text-gray-400">Priority Topics</p>
+        <div className="axel-surface rounded-2xl p-4 border text-center" style={{ borderColor: 'var(--axel-border)' }}>
+          <p className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-300">{priorityTopics.length}</p>
+          <p className="text-sm axel-muted">{t('ros.priorityTopics')}</p>
         </div>
-        <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 text-center">
-          <p className="text-3xl font-bold text-yellow-400">
+        <div className="axel-surface rounded-2xl p-4 border text-center" style={{ borderColor: 'var(--axel-border)' }}>
+          <p className="text-3xl font-extrabold text-amber-600 dark:text-amber-300">
             {topics.filter(t => t.lastUpdate && Date.now() - t.lastUpdate < 5000).length}
           </p>
-          <p className="text-sm text-gray-400">Active (5s)</p>
+          <p className="text-sm axel-muted">{t('ros.activeFiveSeconds')}</p>
         </div>
       </div>
 
@@ -75,17 +77,18 @@ const RosMonitorPage: React.FC<RosMonitorPageProps> = ({ topics, isLoading }) =>
       <div>
         <input
           type="text"
-          placeholder="Search topics..."
+          placeholder={t('ros.searchPlaceholder')}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+          className="w-full px-4 py-2 rounded-lg focus:outline-none focus:border-cyan-500"
+          style={{ background: 'var(--axel-surface-soft)', borderColor: 'var(--axel-border)', color: 'var(--axel-text)' }}
         />
       </div>
 
       {/* Priority Topics */}
       {priorityTopics.length > 0 && (
         <div className="space-y-4">
-          <h2 className="text-xl font-bold text-yellow-400">⭐ Important Topics</h2>
+          <h2 className="text-xl font-bold text-amber-600 dark:text-amber-300">⭐ {t('ros.importantTopics')}</h2>
           <div className="space-y-2">
             {priorityTopics.map((topic) => (
               <TopicCard
@@ -105,7 +108,7 @@ const RosMonitorPage: React.FC<RosMonitorPageProps> = ({ topics, isLoading }) =>
       {/* Other Topics */}
       {otherTopics.length > 0 && (
         <div className="space-y-4">
-          <h2 className="text-xl font-bold text-white">All Topics ({otherTopics.length})</h2>
+          <h2 className="text-xl font-bold" style={{ color: 'var(--axel-text)' }}>{t('ros.allTopics')} ({otherTopics.length})</h2>
           <div className="space-y-2">
             {otherTopics.map((topic) => (
               <TopicCard
@@ -123,8 +126,8 @@ const RosMonitorPage: React.FC<RosMonitorPageProps> = ({ topics, isLoading }) =>
       )}
 
       {filteredTopics.length === 0 && (
-        <div className="text-center py-12 text-gray-400">
-          {isLoading ? 'Loading topics...' : 'No topics found'}
+        <div className="text-center py-12 axel-muted">
+          {isLoading ? t('ros.loadingTopics') : t('ros.noTopics')}
         </div>
       )}
     </div>
@@ -144,6 +147,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
   onToggle,
   icon,
 }) => {
+  const { t } = useAppStore();
   const isActive = topic.lastUpdate && Date.now() - topic.lastUpdate < 5000;
 
   return (
@@ -172,13 +176,13 @@ const TopicCard: React.FC<TopicCardProps> = ({
         <div className="border-t border-gray-700 p-4 bg-gray-900">
           <div className="space-y-2">
             <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wide">Message Type</p>
+              <p className="text-xs text-gray-500 uppercase tracking-wide">{t('ros.messageType')}</p>
               <p className="text-sm font-mono text-blue-400">{topic.type}</p>
             </div>
 
             {topic.latestMessage && (
               <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide">Latest Message</p>
+                <p className="text-xs text-gray-500 uppercase tracking-wide">{t('ros.latestMessage')}</p>
                 <pre className="text-xs text-green-400 font-mono bg-black rounded p-2 overflow-auto max-h-40">
                   {JSON.stringify(topic.latestMessage, null, 2)}
                 </pre>
@@ -187,7 +191,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
 
             {topic.lastUpdate && (
               <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide">Last Update</p>
+                <p className="text-xs text-gray-500 uppercase tracking-wide">{t('ros.lastUpdate')}</p>
                 <p className="text-sm text-gray-300">
                   {new Date(topic.lastUpdate).toLocaleTimeString()}
                 </p>

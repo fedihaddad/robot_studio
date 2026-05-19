@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { VideoCameraIcon } from '@heroicons/react/24/solid';
 import { ROSService } from '../services/ros.service';
+import { useAppStore } from '../store/appStore';
 
 interface CameraPageProps {
   cameraUrl: string;
-  /** Reports whether the stream is reachable (img load success). */
   onConnectionChange?: (connected: boolean) => void;
   rosService?: ROSService | null;
   rosConnected?: boolean;
@@ -16,31 +16,19 @@ const CameraPage: React.FC<CameraPageProps> = ({
   rosService,
   rosConnected = false,
 }) => {
+  const { t } = useAppStore();
   const [streamActive, setStreamActive] = useState(true);
-  // Start offline until we successfully load the first frame.
   const [streamReachable, setStreamReachable] = useState<boolean>(false);
   const [streamResolution, setStreamResolution] = useState<{ width: number; height: number } | null>(null);
   const [selectedVisionMode, setSelectedVisionMode] = useState<string | null>(null);
   const [visionToast, setVisionToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  const streamSrc = useMemo(() => {
-    // Bust cache to force reload on retry (mjpeg endpoints usually ignore query, but safe).
-    const stamp = Date.now();
-    const sep = cameraUrl.includes('?') ? '&' : '?';
-    return `${cameraUrl}${sep}t=${stamp}`;
-  }, [cameraUrl, streamActive]);
-
-  // When URL (or stream on/off) changes, treat it as offline until we load again.
-  useEffect(() => {
-    if (!streamActive) return;
-    setStreamReachable(false);
-    setStreamResolution(null);
-  }, [streamSrc, streamActive]);
-
   useEffect(() => {
     const connected = streamActive && streamReachable;
     onConnectionChange?.(connected);
   }, [onConnectionChange, streamActive, streamReachable]);
+
+  const [streamKey, setStreamKey] = useState(0);
 
   useEffect(() => {
     if (!streamActive || !streamReachable) {
@@ -48,17 +36,18 @@ const CameraPage: React.FC<CameraPageProps> = ({
     }
   }, [streamActive, streamReachable]);
 
-  const publishVisionMode = (mode: string) => {
-    if (!rosConnected || !rosService?.isConnected()) {
-      setVisionToast({ type: 'error', message: 'ROS not connected (start rosbridge on Ubuntu).' });
-      return;
-    }
+  const publishVisionMode = async (mode: string) => {
+    const newMode = selectedVisionMode === mode ? 'raw' : mode;
     try {
-      rosService.publish('/axel/vision/mode', 'std_msgs/String', { data: mode });
-      setSelectedVisionMode(mode);
-      setVisionToast({ type: 'success', message: `Vision mode: ${mode.replaceAll('_', ' ')}` });
+      const response = await fetch(`http://axel.local:8000/api/mode/set?mode=${encodeURIComponent(newMode)}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      setSelectedVisionMode(newMode === 'raw' ? null : newMode);
+      setVisionToast({ type: 'success', message: `${t('camera.visionMode')}: ${newMode === 'raw' ? 'Off' : newMode.replaceAll('_', ' ')}` });
+      setTimeout(() => {
+        setStreamKey(prev => prev + 1);
+      }, 1500);
     } catch {
-      setVisionToast({ type: 'error', message: 'Failed to publish vision mode.' });
+      setVisionToast({ type: 'error', message: t('camera.publishFailed') });
     } finally {
       window.setTimeout(() => setVisionToast(null), 1800);
     }
@@ -74,11 +63,11 @@ const CameraPage: React.FC<CameraPageProps> = ({
           </div>
           <h1 className="text-5xl font-bold">
             <span className="bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-500 bg-clip-text text-transparent">
-              Camera &amp; Vision
+              {t('camera.title')}
             </span>
           </h1>
         </div>
-        <p className="axel-muted text-lg">Real-time camera feed and vision analysis</p>
+        <p className="axel-muted text-lg">{t('camera.subtitle')}</p>
       </div>
 
       {/* Main Layout */}
@@ -88,8 +77,9 @@ const CameraPage: React.FC<CameraPageProps> = ({
           {/* Camera Stream */}
           <div className="relative rounded-xl overflow-hidden border border-cyan-700/25 aspect-video backdrop-blur-sm shadow-2xl" style={{ background: 'var(--axel-surface)' }}>
             <img
-              src={streamActive ? streamSrc : ''}
-              alt="Robot Camera"
+              key={streamKey}
+              src={streamActive ? cameraUrl : ''}
+              alt={t('camera.robotCamera')}
               className="w-full h-full object-cover"
               onLoad={(e) => {
                 setStreamReachable(true);
@@ -100,7 +90,7 @@ const CameraPage: React.FC<CameraPageProps> = ({
                   setStreamResolution({ width: w, height: h });
                 }
               }}
-              onError={(e) => {
+              onError={() => {
                 setStreamReachable(false);
                 setStreamResolution(null);
               }}
@@ -119,7 +109,7 @@ const CameraPage: React.FC<CameraPageProps> = ({
                 }`}
               />
               <span className="font-bold text-sm">
-                {streamActive ? (streamReachable ? 'LIVE STREAM' : 'STREAM OFFLINE') : 'STREAM PAUSED'}
+                {streamActive ? (streamReachable ? t('camera.liveStream') : t('camera.streamOffline')) : t('camera.streamPaused')}
               </span>
             </div>
 
@@ -128,7 +118,7 @@ const CameraPage: React.FC<CameraPageProps> = ({
               className="absolute bottom-4 right-4 flex items-center gap-2 backdrop-blur-sm px-4 py-2 rounded-lg border text-xs"
               style={{ background: 'rgba(15, 23, 42, 0.55)', borderColor: 'var(--axel-border)', color: 'var(--axel-text)' }}
             >
-              <span className="axel-muted">Resolution</span>
+              <span className="axel-muted">{t('camera.resolution')}</span>
               <span className="font-bold">
                 {streamActive && streamReachable && streamResolution
                   ? `${streamResolution.width}×${streamResolution.height}`
@@ -143,7 +133,7 @@ const CameraPage: React.FC<CameraPageProps> = ({
           {/* Camera Controls Panel */}
           <div className="axel-surface rounded-xl p-6 backdrop-blur-sm" style={{ borderColor: 'var(--axel-border)' }}>
             <h3 className="text-lg font-extrabold mb-4 flex items-center gap-2" style={{ color: 'var(--axel-text)' }}>
-              <span>⚙️</span> Camera Controls
+              <span>⚙️</span> {t('camera.controls')}
             </h3>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
@@ -155,10 +145,10 @@ const CameraPage: React.FC<CameraPageProps> = ({
                       : 'axel-button-secondary'
                   }`}
                 >
-                  {streamActive ? '⏹️ Stop Stream' : '▶️ Start Stream'}
+                  {streamActive ? `⏹️ ${t('camera.stopStream')}` : `▶️ ${t('camera.startStream')}`}
                 </button>
                 <button className="axel-button-secondary px-4 py-2 rounded-lg font-medium transition-all">
-                  📸 Screenshot
+                  📸 {t('camera.screenshot')}
                 </button>
               </div>
             </div>
@@ -182,11 +172,11 @@ const CameraPage: React.FC<CameraPageProps> = ({
           {/* Stream Info Card */}
           <div className="axel-surface rounded-xl p-6 backdrop-blur-sm border" style={{ borderColor: 'var(--axel-border)' }}>
             <h3 className="text-lg font-extrabold mb-3 flex items-center gap-2" style={{ color: 'var(--axel-text)' }}>
-              <span className="text-cyan-600 dark:text-cyan-300">ℹ️</span> Stream Info
+              <span className="text-cyan-600 dark:text-cyan-300">ℹ️</span> {t('camera.streamInfo')}
             </h3>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between">
-                <span className="axel-muted">Status</span>
+                <span className="axel-muted">{t('common.status')}</span>
                 <span
                   className={`font-semibold ${
                     !streamActive
@@ -200,13 +190,13 @@ const CameraPage: React.FC<CameraPageProps> = ({
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="axel-muted">Reachable</span>
+                <span className="axel-muted">{t('camera.reachable')}</span>
                 <span className={`font-semibold ${streamActive && streamReachable ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300'}`}>
                   {streamActive ? (streamReachable ? '🟢 Yes' : '🔴 No') : '—'}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="axel-muted">Resolution</span>
+                <span className="axel-muted">{t('camera.resolution')}</span>
                 <span className="font-semibold" style={{ color: 'var(--axel-text)' }}>
                   {streamActive && streamReachable && streamResolution
                     ? `${streamResolution.width}×${streamResolution.height}`
@@ -219,63 +209,58 @@ const CameraPage: React.FC<CameraPageProps> = ({
           {/* Vision Modes */}
           <div className="axel-surface rounded-xl p-6 backdrop-blur-sm border" style={{ borderColor: 'var(--axel-border)' }}>
             <h3 className="text-lg font-extrabold mb-3 flex items-center gap-2" style={{ color: 'var(--axel-text)' }}>
-              <span className="text-cyan-600 dark:text-cyan-300">🔍</span> Vision Modes
+              <span className="text-cyan-600 dark:text-cyan-300">🔍</span> {t('camera.visionModes')}
             </h3>
             <div className="space-y-2">
               <button
-                disabled={!rosConnected}
+                onClick={() => publishVisionMode('face_detect')}
+                className={`w-full px-4 py-2 rounded-lg text-sm font-bold transition-all border ${
+                  selectedVisionMode === 'face_detect'
+                    ? 'axel-button-primary text-white border-cyan-500/40'
+                    : 'axel-button-secondary'
+                }`}
+              >
+                😊 {t('camera.faceRecognition')}
+              </button>
+              <button
+                onClick={() => publishVisionMode('face_track')}
+                className={`w-full px-4 py-2 rounded-lg text-sm font-bold transition-all border ${
+                  selectedVisionMode === 'face_track'
+                    ? 'axel-button-primary text-white border-cyan-500/40'
+                    : 'axel-button-secondary'
+                }`}
+              >
+                🎯 {t('camera.faceTracking')}
+              </button>
+              <button
                 onClick={() => publishVisionMode('object_detection')}
                 className={`w-full px-4 py-2 rounded-lg text-sm font-bold transition-all border ${
                   selectedVisionMode === 'object_detection'
                     ? 'axel-button-primary text-white border-cyan-500/40'
                     : 'axel-button-secondary'
-                } ${!rosConnected ? 'opacity-50 cursor-not-allowed' : ''}`}
+                }`}
               >
-                👁️ Object Detection
+                👁️ {t('camera.objectDetection')}
               </button>
               <button
-                disabled={!rosConnected}
-                onClick={() => publishVisionMode('face_recognition')}
-                className={`w-full px-4 py-2 rounded-lg text-sm font-bold transition-all border ${
-                  selectedVisionMode === 'face_recognition'
-                    ? 'axel-button-primary text-white border-cyan-500/40'
-                    : 'axel-button-secondary'
-                } ${!rosConnected ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                😊 Face Recognition
-              </button>
-              <button
-                disabled={!rosConnected}
-                onClick={() => publishVisionMode('face_tracking')}
-                className={`w-full px-4 py-2 rounded-lg text-sm font-bold transition-all border ${
-                  selectedVisionMode === 'face_tracking'
-                    ? 'axel-button-primary text-white border-cyan-500/40'
-                    : 'axel-button-secondary'
-                } ${!rosConnected ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                🎯 Face Tracking
-              </button>
-              <button
-                disabled={!rosConnected}
                 onClick={() => publishVisionMode('hand_detection')}
                 className={`w-full px-4 py-2 rounded-lg text-sm font-bold transition-all border ${
                   selectedVisionMode === 'hand_detection'
                     ? 'axel-button-primary text-white border-cyan-500/40'
                     : 'axel-button-secondary'
-                } ${!rosConnected ? 'opacity-50 cursor-not-allowed' : ''}`}
+                }`}
               >
-                ✋ Hand Detection
+                ✋ {t('camera.handDetection')}
               </button>
               <button
-                disabled={!rosConnected}
                 onClick={() => publishVisionMode('arm_detection')}
                 className={`w-full px-4 py-2 rounded-lg text-sm font-bold transition-all border ${
                   selectedVisionMode === 'arm_detection'
                     ? 'axel-button-primary text-white border-cyan-500/40'
                     : 'axel-button-secondary'
-                } ${!rosConnected ? 'opacity-50 cursor-not-allowed' : ''}`}
+                }`}
               >
-                💪 Arm Detection
+                💪 {t('camera.armDetection')}
               </button>
             </div>
           </div>

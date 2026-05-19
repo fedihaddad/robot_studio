@@ -7,6 +7,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+import { ArrowsPointingOutIcon, ArrowsPointingInIcon } from '@heroicons/react/24/outline';
 import { parseURDF } from '../../services/urdf.loader';
 import { URDFBuilder } from '../../services/urdf.builder';
 import { CollisionMeshLoader, CollisionGeometry } from '../../services/collision.loader';
@@ -29,6 +30,7 @@ export interface EnhancedVisualizationProps {
   showTF?: boolean;
   showTrajectoryControls?: boolean;
   onJointDrag?: (jointName: string, deltaAngle: number) => void;
+  onRunGesture?: (gesture: 'salam' | 'home' | 'rest' | 'look_left' | 'look_right') => void;
 }
 
 /**
@@ -45,7 +47,9 @@ const EnhancedVisualization: React.FC<EnhancedVisualizationProps> = ({
   showTF = false,
   showTrajectoryControls = true,
   onJointDrag,
+  onRunGesture,
 }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -66,8 +70,17 @@ const EnhancedVisualization: React.FC<EnhancedVisualizationProps> = ({
   const [tfCount, setTFCount] = useState(0);
   const [playbackState, setPlaybackState] = useState<PlaybackState>(PlaybackState.STOPPED);
   const [currentTime, setCurrentTime] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
-  const { config } = useAppStore();
+  const { config, t } = useAppStore();
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   useEffect(() => {
     rosServiceRef.current = propsRosService || rosServiceRef.current;
@@ -394,6 +407,19 @@ const EnhancedVisualization: React.FC<EnhancedVisualizationProps> = ({
           window.removeEventListener('pointerup', onPointerUp);
         });
 
+        // Handle window resize / container resize
+        if (typeof ResizeObserver !== 'undefined' && mountRef.current) {
+          const resizeObserver = new ResizeObserver(() => {
+            if (!mountRef.current || !camera || !renderer) return;
+            const width = mountRef.current.clientWidth;
+            const height = mountRef.current.clientHeight;
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+          });
+          resizeObserver.observe(mountRef.current);
+          cleanupFns.push(() => resizeObserver.disconnect());
+        }
 
         // Animation loop
         const animate = () => {
@@ -484,8 +510,19 @@ const EnhancedVisualization: React.FC<EnhancedVisualizationProps> = ({
     }
   };
 
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      const targetElement = document.getElementById('visualization-page-root') || containerRef.current;
+      targetElement?.requestFullscreen().catch(err => {
+        console.error(`Error attempting to enable fullscreen: ${err.message}`);
+      });
+    } else {
+      document.exitFullscreen();
+    }
+  };
+
   return (
-    <div className="relative w-full h-full bg-gray-900 rounded-lg border border-gray-700 overflow-hidden">
+    <div ref={containerRef} className="relative w-full h-full bg-gray-900 rounded-lg border border-gray-700 overflow-hidden">
       <div ref={mountRef} style={{ width: '100%', height: '100%' }} />
 
       {/* Loading */}
@@ -493,7 +530,7 @@ const EnhancedVisualization: React.FC<EnhancedVisualizationProps> = ({
         <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-70 z-20">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
-            <p className="text-white">{loadingMessage}</p>
+            <p className="text-white">{t('common.loading')}</p>
           </div>
         </div>
       )}
@@ -502,7 +539,7 @@ const EnhancedVisualization: React.FC<EnhancedVisualizationProps> = ({
       {error && (
         <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-70 z-20">
           <div className="bg-gray-800 p-4 rounded max-w-md">
-            <p className="text-red-500 font-bold">Error</p>
+            <p className="text-red-500 font-bold">{t('viewer.error')}</p>
             <p className="text-red-300 text-sm">{error}</p>
           </div>
         </div>
@@ -514,55 +551,68 @@ const EnhancedVisualization: React.FC<EnhancedVisualizationProps> = ({
           <button
             onClick={toggleCollisions}
             className="px-3 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
-            title="Toggle collision meshes"
+            title={t('visual.collisionsToggle')}
           >
-            Collisions
+            {t('visual.collisions')}
           </button>
         )}
         {showMarkers && (
           <button
             onClick={toggleMarkers}
             className="px-3 py-1 bg-yellow-600 text-white text-xs rounded hover:bg-yellow-700"
-            title="Toggle markers (objects, faces)"
+            title={t('visual.markersToggle')}
           >
-            Markers ({markerCount})
+            {t('visual.markers')} ({markerCount})
           </button>
         )}
         {showTF && (
           <button
             onClick={toggleTF}
             className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700"
-            title="Toggle TF frames"
+            title={t('visual.tfToggle')}
           >
-            TF Frames ({tfCount})
+            {t('visual.tf')} ({tfCount})
           </button>
         )}
       </div>
 
+      {/* Fullscreen Button */}
+      <button
+        onClick={toggleFullscreen}
+        className="absolute top-4 right-4 p-2 bg-gray-800 text-gray-300 rounded hover:bg-gray-700 hover:text-white z-10 border border-gray-600 transition-colors"
+        title={isFullscreen ? t('common.close') : t('common.expand')}
+      >
+        {isFullscreen ? (
+          <ArrowsPointingInIcon className="w-5 h-5" />
+        ) : (
+          <ArrowsPointingOutIcon className="w-5 h-5" />
+        )}
+      </button>
+
       {/* Trajectory Playback Controls */}
-      {showTrajectoryControls && (
+      {showTrajectoryControls && !isFullscreen && (
         <div className="absolute bottom-4 left-4 bg-gray-800 p-3 rounded border border-gray-700 z-10">
           <div className="text-xs text-gray-300 mb-2">
-            Trajectory: {playbackState} | Time: {currentTime.toFixed(2)}s
+            {t('visual.trajectory')}: {playbackState} | {t('visual.time')}: {currentTime.toFixed(2)}s
           </div>
           <div className="flex gap-2">
             <button
               onClick={() => trajectoryPlayerRef.current.play('default')}
               className="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700"
             >
-              Play
+              {t('visual.play')}
             </button>
             <button
               onClick={() => trajectoryPlayerRef.current.pause()}
               className="px-2 py-1 bg-yellow-600 text-white text-xs rounded hover:bg-yellow-700"
             >
-              Pause
+              {t('visual.pause')}
             </button>
             <button
               onClick={() => trajectoryPlayerRef.current.stop()}
               className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
             >
-              Stop
+              {t('visual.stop')}
             </button>
           </div>
         </div>
@@ -570,11 +620,23 @@ const EnhancedVisualization: React.FC<EnhancedVisualizationProps> = ({
 
       {/* Status Info */}
       <div className="absolute top-14 right-4 bg-gray-800 p-2 rounded text-xs text-gray-300 z-10">
-        <p>Connected: {isConnected ? '🟢' : '🔴'}</p>
-        <p>Collisions: {collisionCount}</p>
-        <p>Markers: {markerCount}</p>
-        <p>TF Frames: {tfCount}</p>
+        <p>{t('common.connected')}: {isConnected ? '🟢' : '🔴'}</p>
+        <p>{t('visual.collisions')}: {collisionCount}</p>
+        <p>{t('visual.markers')}: {markerCount}</p>
+        <p>{t('visual.tf')}: {tfCount}</p>
       </div>
+
+      {/* Fullscreen Floating Navbar */}
+      {isFullscreen && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-gray-900/80 backdrop-blur-md border border-gray-600/50 p-3 rounded-2xl shadow-2xl z-20">
+           <span className="text-xs font-bold text-gray-400 uppercase tracking-widest mr-2">{t('visual.liveControl')}</span>
+           <button onClick={() => onRunGesture?.('salam')} className="px-4 py-2 bg-cyan-600/90 hover:bg-cyan-500 rounded-xl text-xs font-bold text-white transition-all hover:-translate-y-0.5">{t('visual.salam')}</button>
+           <button onClick={() => onRunGesture?.('home')} className="px-4 py-2 bg-slate-700/90 hover:bg-slate-600 rounded-xl text-xs font-bold text-white transition-all hover:-translate-y-0.5">{t('visual.home')}</button>
+           <button onClick={() => onRunGesture?.('rest')} className="px-4 py-2 bg-violet-600/90 hover:bg-violet-500 rounded-xl text-xs font-bold text-white transition-all hover:-translate-y-0.5">{t('visual.rest')}</button>
+           <button onClick={() => onRunGesture?.('look_left')} className="px-4 py-2 bg-slate-700/90 hover:bg-slate-600 rounded-xl text-xs font-bold text-white transition-all hover:-translate-y-0.5">{t('visual.lookLeft')}</button>
+           <button onClick={() => onRunGesture?.('look_right')} className="px-4 py-2 bg-slate-700/90 hover:bg-slate-600 rounded-xl text-xs font-bold text-white transition-all hover:-translate-y-0.5">{t('visual.lookRight')}</button>
+        </div>
+      )}
     </div>
   );
 };

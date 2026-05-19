@@ -81,7 +81,7 @@ const Dashboard: React.FC<DashboardProps> = ({ state, setState }) => {
                   value={state.ros.rosUrl}
                   onChange={(e) => handleROSUrlChange(e.target.value)}
                   className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                  placeholder="ws://localhost:9090"
+                  placeholder="ws://axel.local:9090"
                 />
               </div>
 

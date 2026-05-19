@@ -13,10 +13,18 @@ import {
   SunIcon,
   VideoCameraIcon,
   WrenchScrewdriverIcon,
+  ShieldCheckIcon,
 } from '@heroicons/react/24/solid';
 import { AppConfig, ROSState, RobotMode } from '../types';
 import { ROSService } from '../services/ros.service';
 import DiagnosticsPanel from '../components/shared/DiagnosticsPanel';
+import { LANGUAGES, Language } from '../i18n';
+import { useAppStore } from '../store/appStore';
+import {
+  DEFAULT_ROSBRIDGE_HOSTNAME,
+  DEFAULT_ROSBRIDGE_URL,
+  normalizeRosbridgeUrl,
+} from '../services/ros-endpoint.service';
 
 interface SettingsPageProps {
   config: AppConfig;
@@ -43,6 +51,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   theme,
   onToggleTheme,
 }) => {
+  const { language, setLanguage, t } = useAppStore();
   const [formData, setFormData] = useState(config);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState<boolean>(true);
@@ -53,38 +62,37 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     | { status: 'fail'; error: string }
   >({ status: 'idle' });
   const [copied, setCopied] = useState(false);
+  const [currentPasswordInput, setCurrentPasswordInput] = useState('');
+  const [isSecurityVerified, setIsSecurityVerified] = useState(!config.passwordEnabled);
+  const [verificationError, setVerificationError] = useState(false);
 
   useEffect(() => {
     setFormData(config);
   }, [config]);
 
-  const handleChange = (field: keyof AppConfig, value: string) => {
+  const handleChange = (field: keyof AppConfig, value: string | boolean) => {
     const newData = { ...formData, [field]: value };
     setFormData(newData);
     onConfigChange(newData);
   };
 
-  const normalizeRosUrl = (value: string): string => {
-    const raw = value.trim();
-    if (!raw) return raw;
-    if (raw.startsWith('ws://') || raw.startsWith('wss://')) return raw;
-    const hostPort = raw.replace(/^https?:\/\//, '');
-    const hasPort = /:\d+$/.test(hostPort);
-    if (hasPort) return `ws://${hostPort}`;
-    return `ws://${hostPort}:9090`;
-  };
-
-  const effectiveRosUrl = useMemo(() => normalizeRosUrl(formData.rosUrl), [formData.rosUrl]);
+  const effectiveRosUrl = useMemo(() => normalizeRosbridgeUrl(formData.rosUrl), [formData.rosUrl]);
 
   const handleSave = () => {
+    const normalizedConfig = {
+      ...formData,
+      rosUrl: effectiveRosUrl,
+    };
+    setFormData(normalizedConfig);
+    onConfigChange(normalizedConfig);
     onSave();
-    setSaveMessage('Settings saved successfully!');
+    setSaveMessage(t('settings.saved'));
     setTimeout(() => setSaveMessage(null), 3000);
   };
 
   const handleLoad = () => {
     onLoad();
-    setSaveMessage('Settings loaded from storage!');
+    setSaveMessage(t('settings.loaded'));
     setTimeout(() => setSaveMessage(null), 3000);
   };
 
@@ -186,14 +194,16 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
 
   const resetDefaults = () => {
     const defaults: AppConfig = {
-      rosUrl: 'ws://10.151.21.13:9090',
-      cameraUrl: 'http://localhost:8080/?action=stream',
-      robotIp: '10.151.21.13',
+      rosUrl: DEFAULT_ROSBRIDGE_URL,
+      cameraUrl: 'http://axel.local:8000/?action=stream',
+      robotIp: DEFAULT_ROSBRIDGE_HOSTNAME,
       robotName: 'AXEL',
+      passwordEnabled: false,
+      password: '',
     };
     setFormData(defaults);
     onConfigChange(defaults);
-    setSaveMessage('Defaults restored (not saved yet)');
+    setSaveMessage(t('settings.defaultsRestored'));
     setTimeout(() => setSaveMessage(null), 3500);
   };
 
@@ -230,6 +240,15 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     }
   };
 
+  const handleVerifyPassword = () => {
+    if (currentPasswordInput === config.password) {
+      setIsSecurityVerified(true);
+      setVerificationError(false);
+    } else {
+      setVerificationError(true);
+    }
+  };
+
   return (
     <div className="p-6 md:p-8 space-y-8">
       {/* Header */}
@@ -240,8 +259,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
               <Cog6ToothIcon className="w-6 h-6 text-cyan-200" aria-hidden />
             </div>
             <div>
-              <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-[color:var(--axel-text)]">Settings</h1>
-              <p className="text-sm md:text-base axel-muted mt-1">Connection parameters and diagnostics</p>
+              <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-[color:var(--axel-text)]">{t('settings.title')}</h1>
+              <p className="text-sm md:text-base axel-muted mt-1">{t('settings.subtitle')}</p>
             </div>
           </div>
         </div>
@@ -251,13 +270,13 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
             <span className={`w-2 h-2 rounded-full ${rosState.isConnected ? 'bg-emerald-400' : 'bg-rose-400'}`} />
             <span className="axel-muted">ROS</span>
             <span className={rosState.isConnected ? 'text-emerald-200' : 'text-rose-200'}>
-              {rosState.isConnected ? 'Connected' : 'Disconnected'}
+              {rosState.isConnected ? t('common.connected') : t('common.disconnected')}
             </span>
           </div>
           <span className="opacity-30">|</span>
           <div className="flex items-center gap-2">
             <AdjustmentsHorizontalIcon className="w-4 h-4 text-slate-300" aria-hidden />
-            <span className="axel-muted">Mode</span>
+            <span className="axel-muted">{t('dashboard.robotMode')}</span>
             <span className="text-cyan-200 font-semibold">{currentMode}</span>
           </div>
         </div>
@@ -267,28 +286,47 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
       <div className="axel-surface rounded-2xl border border-slate-700/60 p-4 flex flex-wrap items-center gap-2">
         <button onClick={testRosbridge} className="axel-button-primary px-4 py-2 rounded-xl text-sm font-bold inline-flex items-center gap-2">
           <BeakerIcon className="w-4 h-4" aria-hidden />
-          {rosTest.status === 'testing' ? 'Testing ROSBridge…' : 'Test ROSBridge'}
+          {rosTest.status === 'testing' ? t('settings.testingRos') : t('settings.testRos')}
         </button>
         <button onClick={copyConfig} className="axel-button-secondary px-4 py-2 rounded-xl text-sm font-bold inline-flex items-center gap-2">
           <ClipboardDocumentIcon className="w-4 h-4" aria-hidden />
-          {copied ? 'Copied' : 'Copy config'}
+          {copied ? t('settings.copied') : t('settings.copyConfig')}
         </button>
         <button onClick={resetDefaults} className="axel-button-secondary px-4 py-2 rounded-xl text-sm font-bold inline-flex items-center gap-2">
           <WrenchScrewdriverIcon className="w-4 h-4" aria-hidden />
-          Reset defaults
+          {t('settings.resetDefaults')}
         </button>
 
         <div className="ml-auto flex items-center gap-2">
-          <span className="text-xs axel-muted hidden sm:block">Theme</span>
+          <span className="text-xs axel-muted hidden sm:block">{t('settings.theme')}</span>
           <button
             type="button"
             onClick={onToggleTheme}
             className="axel-button-secondary px-3 py-2 rounded-xl text-xs font-bold inline-flex items-center gap-2"
-            title="Toggle theme"
+            title={t('common.toggleTheme')}
           >
             {theme === 'dark' ? <MoonIcon className="w-4 h-4" aria-hidden /> : <SunIcon className="w-4 h-4" aria-hidden />}
-            {theme === 'dark' ? 'Dark' : 'Light'}
+            {theme === 'dark' ? t('settings.dark') : t('settings.light')}
           </button>
+          <label className="flex items-center gap-2 text-xs axel-muted">
+            <span className="hidden sm:block">{t('language.label')}</span>
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value as Language)}
+              className="rounded-xl border px-3 py-2 text-xs font-bold"
+              style={{
+                background: 'var(--axel-surface-soft)',
+                borderColor: 'var(--axel-border)',
+                color: 'var(--axel-text)',
+              }}
+            >
+              {LANGUAGES.map((item) => (
+                <option key={item.code} value={item.code}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       </div>
 
@@ -309,14 +347,14 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                 <ComputerDesktopIcon className="w-5 h-5 text-slate-200" aria-hidden />
               </div>
               <div>
-                <h2 className="text-xl font-extrabold text-[color:var(--axel-text)] leading-tight">Robot</h2>
-                <p className="text-xs axel-muted">Identity and local network address</p>
+                <h2 className="text-xl font-extrabold text-[color:var(--axel-text)] leading-tight">{t('settings.robotTitle')}</h2>
+                <p className="text-xs axel-muted">{t('settings.robotSubtitle')}</p>
               </div>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-2">Robot name</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-2">{t('settings.robotName')}</label>
                 <input
                   type="text"
                   value={formData.robotName}
@@ -327,21 +365,21 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-2">Robot IP address</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-2">{t('settings.robotIp')}</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={formData.robotIp}
                     onChange={(e) => handleChange('robotIp', e.target.value)}
                     className="flex-1 px-4 py-3 rounded-xl bg-[var(--axel-surface-soft)] border border-[color:var(--axel-border)] text-[color:var(--axel-text)] placeholder:text-slate-400 focus:outline-none focus:border-cyan-500/60"
-                    placeholder="e.g., 192.168.1.100"
+                  placeholder={DEFAULT_ROSBRIDGE_HOSTNAME}
                   />
                   <button
                     onClick={() => handleTestConnection(`http://${formData.robotIp}:8080`, 'Camera Stream')}
                     className="axel-button-secondary px-4 py-3 rounded-xl text-sm font-bold whitespace-nowrap inline-flex items-center gap-2"
                   >
                     <BeakerIcon className="w-4 h-4" aria-hidden />
-                    Test
+                    {t('settings.test')}
                   </button>
                 </div>
               </div>
@@ -357,66 +395,153 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                 <SignalIcon className="w-5 h-5 text-slate-200" aria-hidden />
               </div>
               <div>
-                <h2 className="text-xl font-extrabold text-[color:var(--axel-text)] leading-tight">Network</h2>
-                <p className="text-xs axel-muted">ROSBridge and camera endpoints</p>
+                <h2 className="text-xl font-extrabold text-[color:var(--axel-text)] leading-tight">{t('settings.networkTitle')}</h2>
+                <p className="text-xs axel-muted">{t('settings.networkSubtitle')}</p>
               </div>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-2">ROSBridge WebSocket URL</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-2">{t('settings.rosBridgeUrl')}</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={formData.rosUrl}
                     onChange={(e) => handleChange('rosUrl', e.target.value)}
                     onBlur={() => {
-                      const normalized = normalizeRosUrl(formData.rosUrl);
+                      const normalized = normalizeRosbridgeUrl(formData.rosUrl);
                       if (normalized !== formData.rosUrl) {
                         handleChange('rosUrl', normalized);
                       }
                     }}
                     className="flex-1 px-4 py-3 rounded-xl bg-[var(--axel-surface-soft)] border border-[color:var(--axel-border)] text-[color:var(--axel-text)] placeholder:text-slate-400 focus:outline-none focus:border-cyan-500/60 font-mono text-sm"
-                    placeholder="ws://192.168.1.100:9090"
+                    placeholder={DEFAULT_ROSBRIDGE_URL}
                   />
                   <button
                     onClick={() => handleTestConnection(formData.rosUrl, 'ROS Bridge')}
                     className="axel-button-secondary px-4 py-3 rounded-xl text-sm font-bold whitespace-nowrap inline-flex items-center gap-2"
                   >
                     <BeakerIcon className="w-4 h-4" aria-hidden />
-                    Test
+                    {t('settings.test')}
                   </button>
                 </div>
                 <p className="text-xs text-slate-400 mt-2">
-                  Normalized: <span className="font-mono text-slate-200">{effectiveRosUrl}</span>
+                  {t('settings.normalized')}: <span className="font-mono text-slate-200">{effectiveRosUrl}</span>
                 </p>
-                <p className="text-xs axel-muted mt-1">WebSocket URL for rosbridge communication.</p>
+                <p className="text-xs axel-muted mt-1">{t('settings.rosBridgeHelp')}</p>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-2">MJPEG camera stream URL</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-2">{t('settings.cameraStreamUrl')}</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={formData.cameraUrl}
                     onChange={(e) => handleChange('cameraUrl', e.target.value)}
                     className="flex-1 px-4 py-3 rounded-xl bg-[var(--axel-surface-soft)] border border-[color:var(--axel-border)] text-[color:var(--axel-text)] placeholder:text-slate-400 focus:outline-none focus:border-cyan-500/60 font-mono text-sm"
-                    placeholder="http://192.168.1.100:8080/?action=stream"
+                    placeholder={`http://${DEFAULT_ROSBRIDGE_HOSTNAME}:8080/?action=stream`}
                   />
                   <button
                     onClick={() => handleTestConnection(formData.cameraUrl, 'MJPEG Camera')}
                     className="axel-button-secondary px-4 py-3 rounded-xl text-sm font-bold whitespace-nowrap inline-flex items-center gap-2"
                   >
                     <VideoCameraIcon className="w-4 h-4" aria-hidden />
-                    Test
+                    {t('settings.test')}
                   </button>
                 </div>
-                <p className="text-xs axel-muted mt-1">HTTP URL to your MJPEG stream (e.g. `/?action=stream`).</p>
+                <p className="text-xs axel-muted mt-1">{t('settings.cameraHelp')}</p>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Security Configuration */}
+      <div className="axel-surface rounded-2xl border border-slate-700/60 p-6 mt-6">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+            <ShieldCheckIcon className="w-5 h-5 text-blue-400" aria-hidden />
+          </div>
+          <div>
+            <h2 className="text-xl font-extrabold text-[color:var(--axel-text)] leading-tight">{t('settings.securityTitle')}</h2>
+            <p className="text-xs axel-muted">{t('settings.securitySubtitle')}</p>
+          </div>
+        </div>
+
+        {!isSecurityVerified && config.passwordEnabled ? (
+          <div className="space-y-4 max-w-md">
+            <div className="space-y-1">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                {t('settings.currentPasswordLabel')}
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={currentPasswordInput}
+                  onChange={(e) => setCurrentPasswordInput(e.target.value)}
+                  className={`flex-1 px-4 py-3 rounded-xl bg-[var(--axel-surface-soft)] border ${
+                    verificationError ? 'border-red-500/50' : 'border-[color:var(--axel-border)]'
+                  } text-[color:var(--axel-text)] focus:outline-none focus:border-blue-500/60 font-mono text-sm`}
+                  placeholder={t('settings.currentPasswordPlaceholder')}
+                />
+                <button
+                  onClick={handleVerifyPassword}
+                  className="axel-button-primary px-6 py-3 rounded-xl text-sm font-bold text-white"
+                >
+                  {t('settings.verify')}
+                </button>
+              </div>
+              {verificationError && (
+                <p className="text-xs text-red-400 mt-1 animate-in fade-in slide-in-from-top-1">
+                  {t('settings.invalidCurrentPassword')}
+                </p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start animate-in fade-in duration-500">
+            <div className="flex items-center justify-between p-5 rounded-2xl bg-blue-500/5 border border-blue-500/10">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <label className="text-base font-bold text-slate-200">{t('settings.passwordEnabled')}</label>
+                  {config.passwordEnabled && (
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400 font-bold uppercase tracking-widest">
+                      {t('settings.verified')}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs axel-muted max-w-xs">{t('settings.passwordHelp')}</p>
+              </div>
+              <button
+                onClick={() => handleChange('passwordEnabled', !formData.passwordEnabled)}
+                className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none ${
+                  formData.passwordEnabled ? 'bg-blue-600' : 'bg-slate-700'
+                }`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform ${
+                    formData.passwordEnabled ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {formData.passwordEnabled && (
+              <div className="animate-in fade-in slide-in-from-left-2 duration-300">
+                <label className="block text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wider">{t('settings.passwordLabel')}</label>
+                <input
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => handleChange('password', e.target.value)}
+                  className="w-full px-4 py-4 rounded-xl bg-[var(--axel-surface-soft)] border border-[color:var(--axel-border)] text-[color:var(--axel-text)] placeholder:text-slate-500 focus:outline-none focus:border-blue-500/60 font-mono text-sm tracking-widest"
+                  placeholder={t('settings.passwordPlaceholder')}
+                />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
 
       {/* Action Buttons */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -425,14 +550,14 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
           className="axel-button-primary px-6 py-3 rounded-2xl font-extrabold text-white inline-flex items-center justify-center gap-2"
         >
           <ArrowDownTrayIcon className="w-5 h-5" aria-hidden />
-          Save
+          {t('common.save')}
         </button>
         <button
           onClick={handleLoad}
           className="axel-button-secondary px-6 py-3 rounded-2xl font-extrabold inline-flex items-center justify-center gap-2"
         >
           <ArrowUpTrayIcon className="w-5 h-5" aria-hidden />
-          Load
+          {t('settings.load')}
         </button>
       </div>
 
@@ -441,24 +566,24 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
         <div className="flex items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2">
             <ClipboardDocumentIcon className="w-5 h-5 text-slate-200" aria-hidden />
-            <h3 className="text-lg font-extrabold text-[color:var(--axel-text)]">Summary</h3>
+            <h3 className="text-lg font-extrabold text-[color:var(--axel-text)]">{t('settings.summary')}</h3>
           </div>
           <button onClick={copyConfig} className="axel-button-secondary px-4 py-2 rounded-xl text-xs font-bold inline-flex items-center gap-2">
             <ClipboardDocumentIcon className="w-4 h-4" aria-hidden />
-            {copied ? 'Copied' : 'Copy'}
+            {copied ? t('settings.copied') : t('settings.copy')}
           </button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
           <div className="rounded-2xl border border-[color:var(--axel-border)] bg-[var(--axel-surface-soft)] p-4">
-            <p className="text-xs axel-muted mb-1">Robot</p>
+            <p className="text-xs axel-muted mb-1">{t('settings.robotTitle')}</p>
             <p className="text-[color:var(--axel-text)] font-semibold">{formData.robotName}</p>
-            <p className="text-xs axel-muted mt-2">IP</p>
+            <p className="text-xs axel-muted mt-2">{t('settings.ip')}</p>
             <p className="text-[color:var(--axel-text)] font-mono text-sm">{formData.robotIp}</p>
           </div>
           <div className="rounded-2xl border border-[color:var(--axel-border)] bg-[var(--axel-surface-soft)] p-4">
-            <p className="text-xs axel-muted mb-1">ROS URL</p>
+            <p className="text-xs axel-muted mb-1">{t('settings.rosUrl')}</p>
             <p className="text-[color:var(--axel-text)] font-mono text-sm break-all">{formData.rosUrl}</p>
-            <p className="text-xs axel-muted mt-2">Camera URL</p>
+            <p className="text-xs axel-muted mt-2">{t('settings.cameraUrl')}</p>
             <p className="text-[color:var(--axel-text)] font-mono text-sm break-all">{formData.cameraUrl}</p>
           </div>
         </div>
@@ -470,15 +595,15 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <BeakerIcon className="w-5 h-5 text-slate-200" aria-hidden />
-              <h2 className="text-2xl font-extrabold text-[color:var(--axel-text)]">Diagnostics</h2>
+              <h2 className="text-2xl font-extrabold text-[color:var(--axel-text)]">{t('settings.diagnostics')}</h2>
             </div>
-            <p className="text-sm axel-muted">Logs & debug (useful for soutenance)</p>
+            <p className="text-sm axel-muted">{t('settings.diagnosticsSubtitle')}</p>
           </div>
           <button
             onClick={() => setShowDiagnostics((v) => !v)}
             className="axel-button-secondary px-4 py-2 rounded-xl text-sm font-bold"
           >
-            {showDiagnostics ? 'Hide' : 'Show'}
+            {showDiagnostics ? t('settings.hide') : t('settings.show')}
           </button>
         </div>
 

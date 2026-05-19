@@ -189,14 +189,33 @@ export class GeminiService {
 
       // ── analyser_scene_vision ──
       if (name === 'analyser_scene_vision') {
-        // Vision not available in dashboard — respond with error
+        // Build the vision request payload (matches gemini_vision_node.py expectations)
+        const visionRequest = {
+          request_id: `dash-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          prompt: args.prompt || "Describe the scene.",
+          mode: args.mode || "points",
+          max_items: args.max_items || 10,
+        };
+
+        // Publish to /axel/vision/request if ROS is connected
+        if (this.rosService) {
+          const requestTopic = this.rosService.createTopic?.('/axel/vision/request', 'std_msgs/String');
+          if (requestTopic) {
+            requestTopic.publish({ data: JSON.stringify(visionRequest) });
+            console.log('👁️ Vision request published to ROS:', visionRequest);
+          }
+        }
+
+        // We respond to Gemini that the request was sent. 
+        // Note: The real-time response from the vision node will be handled via the ROS response topic.
         this.client.sendToolResponse([{
           name,
           id,
-          response: {
-            ok: false,
-            error_type: 'vision_not_available',
-            error: 'Vision analysis is not available from the dashboard. Use the robot backend for vision.',
+          response: { 
+            ok: true, 
+            status: 'request_sent', 
+            request_id: visionRequest.request_id,
+            info: 'Request dispatched to robot vision node.'
           },
         }]);
         continue;

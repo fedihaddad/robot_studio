@@ -40,7 +40,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           value={rosInput}
           onChange={(e) => setRosInput(e.target.value)}
           className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-sm text-white focus:outline-none focus:border-blue-500"
-          placeholder="ws://localhost:9090"
+                  placeholder="ws://axel.local:9090"
         />
         <button
           onClick={handleUpdateROS}

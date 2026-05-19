@@ -356,26 +356,26 @@ export class GeminiLiveAPI {
     const sessionSetupMessage = {
       setup: {
         model: this.modelUri,
-        generationConfig: {
-          responseModalities: this.responseModalities,
+        generation_config: {
+          response_modalities: this.responseModalities,
           temperature: this.temperature,
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: {
-                voiceName: this.voiceName,
+          speech_config: {
+            voice_config: {
+              prebuilt_voice_config: {
+                voice_name: this.voiceName,
               },
             },
           },
         },
-        systemInstruction: { parts: [{ text: this.systemInstructions }] },
-        tools: tools.length > 0 ? [{ functionDeclarations: tools }] : [],
+        system_instruction: { parts: [{ text: this.systemInstructions }] },
+        tools: tools.length > 0 ? [{ function_declarations: tools }] : [],
       },
     };
 
     // Google Search grounding (mutually exclusive with custom tools in v1beta)
     if (this.googleGrounding) {
       console.log("Google Search enabled, replacing custom tools.");
-      sessionSetupMessage.setup.tools = [{ googleSearch: {} }];
+      sessionSetupMessage.setup.tools = [{ google_search: {} }];
     }
 
     this.lastSetupMessage = sessionSetupMessage;
@@ -388,7 +388,7 @@ export class GeminiLiveAPI {
    */
   sendTextMessage(text) {
     const message = {
-      realtimeInput: {
+      realtime_input: {
         text: text,
       },
     };
@@ -401,8 +401,8 @@ export class GeminiLiveAPI {
    */
   sendToolResponse(functionResponses) {
     const message = {
-      toolResponse: {
-        functionResponses: functionResponses.map((fr) => ({
+      tool_response: {
+        function_responses: functionResponses.map((fr) => ({
           name: fr.name,
           id: fr.id,
           response: fr.response,
@@ -420,18 +420,18 @@ export class GeminiLiveAPI {
    */
   sendRealtimeInputMessage(data, mimeType) {
     const message = {
-      realtimeInput: {},
+      realtime_input: {},
     };
 
     if (mimeType.startsWith("audio/")) {
-      message.realtimeInput.audio = {
+      message.realtime_input.audio = {
         data: data,
-        mimeType: mimeType,
+        mime_type: mimeType,
       };
     } else if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) {
-      message.realtimeInput.video = {
+      message.realtime_input.video = {
         data: data,
-        mimeType: mimeType,
+        mime_type: mimeType,
       };
     }
 

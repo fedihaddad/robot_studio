@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Diagramme de classes - Dashboard AXEL</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: "Segoe UI", Arial, sans-serif;
+        background: #ffffff;
+        color: #0f172a;
+      }
+
+      .page {
+        max-width: 1400px;
+        margin: 24px auto;
+        padding: 24px;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 28px;
+      }
+
+      p {
+        margin: 0 0 18px;
+        color: #334155;
+      }
+
+      .toolbar {
+        display: flex;
+        gap: 12px;
+        margin: 0 0 18px;
+        flex-wrap: wrap;
+      }
+
+      .toolbar button {
+        border: 1px solid #93c5fd;
+        background: #dbeafe;
+        color: #1e3a8a;
+        border-radius: 10px;
+        padding: 10px 14px;
+        font: 600 14px "Segoe UI", Arial, sans-serif;
+        cursor: pointer;
+      }
+
+      .toolbar button:hover {
+        background: #bfdbfe;
+      }
+
+      .panel {
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 16px;
+        padding: 18px;
+        box-shadow: none;
+        overflow: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <h1>Diagramme de classes du Dashboard AXEL</h1>
+      <p>
+        Vue simplifiee des principaux composants logiciels utilises dans
+        l'application de supervision et de visualisation 3D.
+      </p>
+      <div class="toolbar">
+        <button id="download-svg-btn" type="button">Telecharger SVG</button>
+        <button id="download-png-btn" type="button">Telecharger PNG</button>
+      </div>
+      <div class="panel">
+        <div id="diagram"></div>
+      </div>
+    </div>
+
+    <script src="./dashboard-class-diagram.js"></script>
+  </body>
+</html>

@@ -4,6 +4,7 @@ import { useServoControl } from '../hooks/useServoControl';
 import { ServoCommand } from '../types';
 import { ROSService } from '../services/ros.service';
 import { getServoConfig } from '../config/servoDegrees.config';
+import { useAppStore } from '../store/appStore';
 
 interface ManualServoControlPageProps {
   joints?: Record<number, number>;
@@ -84,6 +85,7 @@ const ManualServoControlPage: React.FC<ManualServoControlPageProps> = ({
   joints = {},
   rosService,
 }) => {
+  const { t } = useAppStore();
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
     new Set(servoGroups.map(g => g.name))
   );
@@ -172,9 +174,9 @@ const ManualServoControlPage: React.FC<ManualServoControlPageProps> = ({
       {/* Header */}
       <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-4xl font-extrabold mb-2 axel-gradient-text">Manual Servo Control</h1>
+          <h1 className="text-4xl font-extrabold mb-2 axel-gradient-text">{t('manual.title')}</h1>
           <p className="axel-muted">
-            Control each facial servo individually
+            {t('manual.subtitle')}
           </p>
         </div>
         <div className="flex gap-3">
@@ -189,9 +191,9 @@ const ManualServoControlPage: React.FC<ManualServoControlPageProps> = ({
               });
             }}
             className="axel-button-secondary px-4 py-2 rounded-xl font-semibold transition-colors"
-            title="Reset ALL servos to center position"
+            title={t('manual.resetAllTitle')}
           >
-            Reset All
+            {t('common.resetAll')}
           </button>
         </div>
       </div>
@@ -203,7 +205,7 @@ const ManualServoControlPage: React.FC<ManualServoControlPageProps> = ({
 
       {/* Presets */}
       <div className="axel-surface rounded-2xl p-6 border" style={{ borderColor: 'var(--axel-border)' }}>
-        <h2 className="text-lg font-extrabold mb-4" style={{ color: 'var(--axel-text)' }}>Quick Presets</h2>
+        <h2 className="text-lg font-extrabold mb-4" style={{ color: 'var(--axel-text)' }}>{t('manual.quickPresets')}</h2>
         <div className="grid grid-cols-5 gap-3">
           {[
             { id: 'neutral', label: '😐 Neutral', emoji: '😐' },
@@ -253,9 +255,9 @@ const ManualServoControlPage: React.FC<ManualServoControlPageProps> = ({
                   resetGroup(group);
                 }}
                 className="ml-4 px-3 py-2 axel-button-secondary rounded-xl text-sm font-semibold transition-colors whitespace-nowrap"
-                title={`Reset all servos in ${group.name} to center position`}
+                title={`${t('common.reset')} ${group.name}`}
               >
-                Reset
+                {t('common.reset')}
               </button>
             </div>
 
@@ -290,13 +292,13 @@ const ManualServoControlPage: React.FC<ManualServoControlPageProps> = ({
 
       {/* Instructions */}
       <div className="axel-surface rounded-2xl p-6 border" style={{ borderColor: 'var(--axel-border)' }}>
-        <h3 className="text-lg font-extrabold mb-3" style={{ color: 'var(--axel-text)' }}>Instructions</h3>
+        <h3 className="text-lg font-extrabold mb-3" style={{ color: 'var(--axel-text)' }}>{t('manual.instructions')}</h3>
         <ul className="space-y-2 text-sm" style={{ color: 'var(--axel-text)' }}>
-          <li>✓ Click on a group to expand/collapse servo controls</li>
-          <li>✓ Use presets for quick facial expressions</li>
-          <li>✓ Drag sliders to adjust individual servo angles</li>
-          <li>✓ All changes are sent in real-time to your Raspberry Pi</li>
-          <li>✓ Min/Max angles will be customized with exact degrees per servo</li>
+          <li>✓ {t('manual.instruction.expand')}</li>
+          <li>✓ {t('manual.instruction.presets')}</li>
+          <li>✓ {t('manual.instruction.sliders')}</li>
+          <li>✓ {t('manual.instruction.realtime')}</li>
+          <li>✓ {t('manual.instruction.limits')}</li>
         </ul>
       </div>
 

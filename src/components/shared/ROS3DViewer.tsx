@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { useAppStore } from '../../store/appStore';
 
 // Import ROS3D and ROSLIB dynamically
 let ROS3D: any = null;
@@ -50,6 +51,7 @@ const ROS3DViewer: React.FC<ROS3DViewerProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [robotLoaded, setRobotLoaded] = useState(false);
+  const { t } = useAppStore();
 
   useEffect(() => {
     if (!mountRef.current) return;
@@ -231,8 +233,8 @@ const ROS3DViewer: React.FC<ROS3DViewerProps> = ({
             <div className="mb-4 flex justify-center">
               <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
             </div>
-            <p className="text-white text-lg font-semibold">Connecting to ROS...</p>
-            <p className="text-gray-400 text-sm mt-2">Loading URDF from Raspberry Pi</p>
+            <p className="text-white text-lg font-semibold">{t('common.loading')}</p>
+            <p className="text-gray-400 text-sm mt-2">{t('viewer.loadingUrdf')}</p>
           </div>
         </div>
       )}
@@ -259,7 +261,7 @@ const ROS3DViewer: React.FC<ROS3DViewerProps> = ({
 
       {!isConnected && (
         <div className="absolute top-4 right-4 bg-red-900 border border-red-700 rounded px-3 py-2 z-10">
-          <p className="text-red-300 text-sm">ROS Disconnected</p>
+          <p className="text-red-300 text-sm">{t('viewer.rosDisconnected')}</p>
         </div>
       )}
 
