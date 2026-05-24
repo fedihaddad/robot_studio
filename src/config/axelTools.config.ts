@@ -118,6 +118,33 @@ const TOOLS_FULL: ToolDeclaration[] = [
       required: ["confirmation"],
     },
   },
+
+  // ── RECHERCHE WEB ──
+  {
+    name: "recherche_web",
+    description: "Rechercher des informations actuelles sur internet. Utiliser quand l'utilisateur pose une question nécessitant des données récentes (actualités, infos, faits).",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "La requête de recherche à effectuer." },
+      },
+      required: ["query"],
+    },
+  },
+
+  // ── MÉTÉO ──
+  {
+    name: "get_weather_info",
+    description: "Obtenir la météo actuelle d'une ville. Utiliser quand l'utilisateur demande la météo ou la température.",
+    parameters: {
+      type: "object",
+      properties: {
+        city: { type: "string", description: "Nom de la ville (ex: Tunis, Paris, London)." },
+        lang: { type: "string", description: "Langue de la réponse: 'fr', 'en', 'ar'. Défaut: 'fr'." },
+      },
+      required: ["city"],
+    },
+  },
 ];
 
 // ── Set of all physical action tool names ──
@@ -141,14 +168,32 @@ export const PHYSICAL_ACTION_TOOLS = new Set([
   "effacer_expression", "ouvrir_bouche_vocal", "fermer_bouche_vocal",
 ]);
 
+// ── Tools blocked in KIDS mode (safety) ──
+const KIDS_BLOCKED_TOOLS = new Set([
+  "exit_assistant",
+  "terminer_conversation",
+  "recherche_web",
+]);
+
+// ── Tools blocked when vision is not allowed ──
+const VISION_TOOLS = new Set([
+  "analyser_scene_vision",
+]);
+
 /**
  * Get tool declarations formatted for Gemini Live API setup message.
  * Filters tools based on mode capabilities.
  */
-export function getToolDeclarationsForMode(allowPhysicalActions: boolean): any[] {
+export function getToolDeclarationsForMode(allowPhysicalActions: boolean, mode?: string): any[] {
+  const isKids = mode === 'KIDS';
+
   const declarations = TOOLS_FULL.map((tool) => {
-    // Filter out physical action tools if not allowed
+    // Filter physical action tools if not allowed
     if (!allowPhysicalActions && PHYSICAL_ACTION_TOOLS.has(tool.name)) {
+      return null;
+    }
+    // Filter blocked tools for KIDS mode
+    if (isKids && KIDS_BLOCKED_TOOLS.has(tool.name)) {
       return null;
     }
     // Format for Gemini API (strip 'behavior' field)

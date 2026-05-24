@@ -1,0 +1,11 @@
+{
+  "name": "axel-assembly-demo",
+  "version": "1.0.0",
+  "description": "AXEL Robot 3D Assembly Animation - piece by piece",
+  "scripts": {
+    "start": "npx serve .. -l 3333 -C"
+  },
+  "devDependencies": {
+    "serve": "^14.0.0"
+  }
+}

@@ -74,8 +74,6 @@ export class ROSService {
     torso_controller: ['waist_pan_joint', 'waist_roll_joint'],
   };
 
-  private actionClients: Map<string, any> = new Map();
-
   constructor(rosUrl: string, options: ROSServiceOptions = {}) {
     if (!window.ROSLIB) {
       throw new Error('ROSLIB not loaded');
@@ -149,7 +147,6 @@ export class ROSService {
     this.publishers.forEach(pub => pub.unsubscribe());
     this.topicCache.clear();
     this.lastJointPositions.clear();
-    this.actionClients.clear();
     if (this.ros) {
       this.ros.close();
     }
@@ -314,93 +311,29 @@ export class ROSService {
     this.publishServoAsJointTrajectory(servo);
   }
 
-  private getActionClient(actionName: string, actionType: string): any | null {
-    if (!window.ROSLIB?.ActionClient) {
-      return null;
-    }
-    const existing = this.actionClients.get(actionName);
-    if (existing) return existing;
-
-    try {
-      const client = new window.ROSLIB.ActionClient({
-        ros: this.ros,
-        serverName: actionName,
-        actionName: actionType,
-      });
-      this.actionClients.set(actionName, client);
-      return client;
-    } catch (err) {
-      console.warn('[ROS] Failed to create ActionClient:', actionName, err);
-      return null;
-    }
-  }
-
-  private trySendFollowJointTrajectoryGoal(
-    controllerName: string,
-    jointNames: string[],
-    positions: number[],
-    durationSec: number
-  ): boolean {
-    // ROS side exposes action servers at: `/<controller>/follow_joint_trajectory`
-    // with action type `control_msgs/FollowJointTrajectory`.
-    const actionName = `/${controllerName}/follow_joint_trajectory`;
-    const client = this.getActionClient(actionName, 'control_msgs/FollowJointTrajectory');
-    if (!client || !window.ROSLIB?.Goal) return false;
-
-    try {
-      const sec = Math.max(0, Math.floor(durationSec));
-      const nanosec = Math.max(0, Math.floor((durationSec - sec) * 1e9));
-
-      const goal = new window.ROSLIB.Goal({
-        actionClient: client,
-        goalMessage: {
-          trajectory: {
-            joint_names: jointNames,
-            points: [
-              {
-                positions,
-                time_from_start: { sec, nanosec },
-              },
-            ],
-          },
-        },
-      });
-
-      goal.send();
-      window.terminalLogger?.log('[ROS TX] FollowJointTrajectory goal sent', {
-        actionName,
-        jointNames,
-        durationSec,
-      });
-      return true;
-    } catch (err) {
-      console.warn('[ROS] Failed to send FollowJointTrajectory goal:', err);
-      return false;
-    }
-  }
-
   private publishServoAsJointTrajectory(servo: ServoCommand): void {
-    // IMPORTANT:
-    // Dashboard servo IDs (1..39) are not the same as the internal URDF mapping IDs (0..56).
-    // Prefer the explicit jointName from `servoDegrees.config.ts` when available.
     const config = getServoConfig(servo.id) as any;
     const jointName: string | undefined =
       (typeof config?.jointName === 'string' && config.jointName.length > 0
         ? config.jointName
         : SERVO_ID_TO_JOINT_NAME[servo.id]);
-    if (!jointName) {
-      return;
-    }
+    if (!jointName) return;
 
     const defaultDegrees = typeof config?.default === 'number' ? config.default : 0;
     const targetRadians = ((servo.angle - defaultDegrees) * Math.PI) / 180;
     const controller = this.getControllerForJoint(jointName);
-    const controllerTopic = controller ? `/${controller}/joint_trajectory` : this.dashboardTrajectoryTopic;
+
+    // ROS 2 — topic direct : /<controller>/joint_trajectory
+    // type   : trajectory_msgs/JointTrajectory
+    // Rosbridge comprend ce format sans ActionClient.
+    const controllerTopic = controller
+      ? `/${controller}/joint_trajectory`
+      : this.dashboardTrajectoryTopic;
+
     const latestJointState = this.getLatestServoState();
 
-    // Preferred: publish full controller state based on latest /joint_states so
-    // per-group controllers receive a complete and coherent goal.
     if (
+      controller &&
       latestJointState?.name &&
       latestJointState?.position &&
       Array.isArray(latestJointState.name) &&
@@ -410,62 +343,29 @@ export class ROSService {
       const latestByName = new Map<string, number>();
       latestJointState.name.forEach((name: string, idx: number) => {
         const pos = latestJointState.position[idx];
-        if (Number.isFinite(pos)) {
-          latestByName.set(name, pos);
-        }
+        if (Number.isFinite(pos)) latestByName.set(name, pos);
       });
 
-      if (controller) {
-        const controllerJoints = this.controllerJointMap[controller] || [];
-        const hasFullControllerState =
-          controllerJoints.length > 0 && controllerJoints.every((name) => latestByName.has(name));
+      const controllerJoints = this.controllerJointMap[controller] || [];
+      const hasFullState = controllerJoints.length > 0 &&
+        controllerJoints.every((n) => latestByName.has(n));
 
-        if (hasFullControllerState) {
-          const positions = controllerJoints.map((name) =>
-            name === jointName ? targetRadians : (latestByName.get(name) as number)
-          );
-          const sentAsAction = this.trySendFollowJointTrajectoryGoal(controller, controllerJoints, positions, 0.25);
-          if (!sentAsAction) {
-            this.publishJointTrajectory(controllerTopic, controllerJoints, positions, 0.25);
-          }
-          window.terminalLogger?.log('[ROS TX] dashboard trajectory (controller full-state)', {
-            sentAsAction,
-            controller,
-            joint: jointName,
-            targetRadians,
-            topic: controllerTopic,
-          });
-          return;
-        }
-      }
-
-      if (latestByName.has(jointName)) {
-        const sentAsAction = controller ? this.trySendFollowJointTrajectoryGoal(controller, [jointName], [targetRadians], 0.25) : false;
-        if (!sentAsAction) {
-          this.publishJointTrajectory(controllerTopic, [jointName], [targetRadians], 0.25);
-        }
-        window.terminalLogger?.log('[ROS TX] dashboard trajectory (single-joint)', {
-          sentAsAction,
-          controller,
-          joint: jointName,
-          targetRadians,
-          topic: controllerTopic,
+      if (hasFullState) {
+        const positions = controllerJoints.map((n) =>
+          n === jointName ? targetRadians : (latestByName.get(n) as number)
+        );
+        this.publishJointTrajectory(controllerTopic, controllerJoints, positions, 0.25);
+        window.terminalLogger?.log('[ROS TX] joint_trajectory (full controller)', {
+          topic: controllerTopic, joint: jointName, targetRadians,
         });
         return;
       }
     }
 
-    // Fallback: publish a single-joint trajectory.
-    const sentAsAction = controller ? this.trySendFollowJointTrajectoryGoal(controller, [jointName], [targetRadians], 0.25) : false;
-    if (!sentAsAction) {
-      this.publishJointTrajectory(controllerTopic, [jointName], [targetRadians], 0.25);
-    }
-    window.terminalLogger?.log('[ROS TX] dashboard trajectory (fallback single-joint)', {
-      sentAsAction,
-      controller,
-      joint: jointName,
-      targetRadians,
-      topic: controllerTopic,
+    // Fallback : un seul joint
+    this.publishJointTrajectory(controllerTopic, [jointName], [targetRadians], 0.25);
+    window.terminalLogger?.log('[ROS TX] joint_trajectory (single joint)', {
+      topic: controllerTopic, joint: jointName, targetRadians,
     });
   }
 
@@ -797,21 +697,16 @@ export class ROSService {
   }
 
   /**
-   * Publish trajectory for execution
+   * Publish trajectory for execution — ROS 2 direct topic (no ActionClient).
+   * Publishes to /joint_trajectory_controller/joint_trajectory
    */
   publishTrajectory(jointNames: string[], points: any[]): void {
-    const trajectory = {
-      joint_names: jointNames,
-      points: points,
-    };
-
     this.publish(
-      '/execute_trajectory/goal',
-      'control_msgs/FollowJointTrajectoryActionGoal',
+      this.dashboardTrajectoryTopic,
+      'trajectory_msgs/JointTrajectory',
       {
-        goal: {
-          trajectory: trajectory,
-        },
+        joint_names: jointNames,
+        points: points,
       }
     );
   }

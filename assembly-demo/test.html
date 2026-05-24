@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head><title>Test STL</title></head>
+<body>
+<h2 id="msg">Test en cours...</h2>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import {STLLoader} from 'three/addons/loaders/STLLoader.js';
+
+const msg = document.getElementById('msg');
+
+try {
+  msg.textContent = '1. Fetching URDF...';
+  const resp = await fetch('/public/data/inmoov-local.urdf');
+  const txt = await resp.text();
+  msg.textContent = `2. URDF loaded: ${txt.length} chars`;
+
+  const loader = new STLLoader();
+  msg.textContent = '3. Loading torso.stl...';
+  
+  loader.load('/public/meshes/torso.stl', (geo) => {
+    msg.textContent = `4. SUCCESS! torso.stl loaded: ${geo.attributes.position.count} vertices`;
+  }, undefined, (err) => {
+    msg.textContent = '4. FAIL: ' + err;
+  });
+} catch(e) {
+  msg.textContent = 'ERROR: ' + e.message;
+}
+</script>
+</body>
+</html>

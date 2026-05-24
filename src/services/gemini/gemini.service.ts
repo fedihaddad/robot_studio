@@ -69,7 +69,7 @@ export class GeminiService {
     this.client.setSystemInstructions(fullInstruction);
 
     // Set tool declarations filtered by mode capabilities
-    const tools = getToolDeclarationsForMode(capabilities.allowPhysicalActions);
+    const tools = getToolDeclarationsForMode(capabilities.allowPhysicalActions, mode);
     this.client.setFunctionDeclarations(tools);
 
     // Apply mode update immediately on active session (no reconnect)
@@ -137,7 +137,7 @@ export class GeminiService {
   /**
    * Handle tool calls from Gemini — mirrors axel_live_node.py receive_loop logic.
    */
-  private handleToolCall(toolCallData: any) {
+  private async handleToolCall(toolCallData: any) {
     const functionCalls = toolCallData?.functionCalls || [];
 
     for (const call of functionCalls) {
@@ -184,6 +184,90 @@ export class GeminiService {
         }]);
         // Stop after goodbye audio plays
         setTimeout(() => this.stop(), 3000);
+        continue;
+      }
+
+      // ── recherche_web ──
+      if (name === 'recherche_web') {
+        const query = args.query || '';
+        console.log(`🔍 Web search: ${query}`);
+        try {
+          // DuckDuckGo Instant Answer API (CORS-friendly, no API key needed)
+          const encoded = encodeURIComponent(query);
+          const resp = await fetch(`https://api.duckduckgo.com/?q=${encoded}&format=json&no_redirect=1&no_html=1&skip_disambig=1`);
+          const data = await resp.json();
+          const answer = data.AbstractText || data.Answer || data.Definition || '';
+          const source = data.AbstractSource || data.AnswerType || '';
+          const relatedTopics = (data.RelatedTopics || [])
+            .slice(0, 3)
+            .map((t: any) => t.Text || '')
+            .filter(Boolean)
+            .join(' | ');
+
+          const result = answer
+            ? `${answer}${source ? ` (source: ${source})` : ''}`
+            : relatedTopics || `Aucun résultat direct trouvé pour: "${query}"`;
+
+          this.client.sendToolResponse([{
+            name, id,
+            response: { result, query, status: 'ok' },
+          }]);
+        } catch (e) {
+          this.client.sendToolResponse([{
+            name, id,
+            response: { status: 'error', error: 'Recherche non disponible.', query },
+          }]);
+        }
+        continue;
+      }
+
+      // ── get_weather_info ──
+      if (name === 'get_weather_info') {
+        const city = args.city || 'Tunis';
+        const lang = args.lang || 'fr';
+        console.log(`🌤️ Weather request: ${city}`);
+        try {
+          // wttr.in — free, no API key, supports JSON
+          const encoded = encodeURIComponent(city);
+          const resp = await fetch(`https://wttr.in/${encoded}?format=j1`);
+          const data = await resp.json();
+          const current = data.current_condition?.[0];
+          const area = data.nearest_area?.[0];
+          const areaName = area?.areaName?.[0]?.value || city;
+          const country = area?.country?.[0]?.value || '';
+
+          if (current) {
+            const tempC = current.temp_C;
+            const feelsLike = current.FeelsLikeC;
+            const desc = lang === 'ar'
+              ? current.lang_ar?.[0]?.value
+              : lang === 'fr'
+              ? current.lang_fr?.[0]?.value
+              : current.weatherDesc?.[0]?.value;
+            const humidity = current.humidity;
+            const windKmph = current.windspeedKmph;
+
+            this.client.sendToolResponse([{
+              name, id,
+              response: {
+                city: `${areaName}, ${country}`,
+                temperature_c: tempC,
+                feels_like_c: feelsLike,
+                description: desc || current.weatherDesc?.[0]?.value,
+                humidity_percent: humidity,
+                wind_kmph: windKmph,
+                status: 'ok',
+              },
+            }]);
+          } else {
+            throw new Error('No weather data');
+          }
+        } catch (e) {
+          this.client.sendToolResponse([{
+            name, id,
+            response: { status: 'error', error: `Météo indisponible pour "${city}".` },
+          }]);
+        }
         continue;
       }
 

@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>AXEL — InMoov Assembly</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{background:#ffffff;font-family:'Segoe UI',system-ui,sans-serif;overflow:hidden;color:#1a1a2e}
+    canvas{display:block}
+    #ui{position:fixed;inset:0;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between;padding:16px 24px}
+    #top{text-align:center}
+    #top h1{display:none}
+    #sec{text-align:center;margin-top:12px;font-size:15px;color:#2563eb;font-weight:600;letter-spacing:1px}
+    #bottom{display:flex;align-items:center;gap:12px}
+    #barbg{flex:1;height:3px;background:rgba(0,0,0,.1);border-radius:2px}
+    #bar{height:100%;width:0%;background:#2563eb;border-radius:2px;transition:width .4s}
+    #info{min-width:80px;text-align:right;font-size:11px;color:rgba(0,0,0,.4)}
+    #pn{display:none}
+    #ct{color:#94a3b8;font-size:11px}
+    #ctrls{position:fixed;bottom:36px;left:50%;transform:translateX(-50%);display:flex;gap:8px;pointer-events:all}
+    .b{padding:7px 16px;border:1px solid rgba(0,0,0,.15);background:rgba(255,255,255,.9);color:#334155;border-radius:6px;cursor:pointer;font-size:11px;backdrop-filter:blur(4px);transition:all .2s}
+    .b:hover{border-color:#2563eb;color:#2563eb}.b.on{background:#2563eb;color:#fff;border-color:#2563eb}
+    #ld{position:fixed;inset:0;background:#ffffff;z-index:99;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .5s}
+    #ld.h{opacity:0;pointer-events:none}
+    .sp{width:28px;height:28px;border:3px solid rgba(0,0,0,.1);border-top-color:#2563eb;border-radius:50%;animation:s .6s linear infinite}
+    @keyframes s{to{transform:rotate(360deg)}}
+    #lt{font-size:12px;color:rgba(0,0,0,.4);margin-top:8px}
+  </style>
+</head>
+<body>
+<div id="ld"><div class="sp"></div><div id="lt">Chargement...</div></div>
+<div id="ui">
+  <div><div id="top"><h1>AXEL ROBOT — ASSEMBLAGE</h1></div><div id="sec"></div></div>
+  <div id="bottom"><div id="barbg"><div id="bar"></div></div><div id="info"><div id="pn"></div><div id="ct"></div></div></div>
+</div>
+<div id="ctrls">
+  <button class="b" id="bp">&#9654; Play</button>
+  <button class="b" id="bpa">&#10074;&#10074;</button>
+  <button class="b" id="br">&#8634;</button>
+  <button class="b" id="bs">Lent</button>
+  <button class="b on" id="bn">Normal</button>
+  <button class="b" id="bf">Rapide</button>
+</div>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {STLLoader} from 'three/addons/loaders/STLLoader.js';
+
+const M='/public/meshes/',U='/public/data/inmoov-local.urdf';
+const easeIO=(t)=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+const easeOut=(t)=>1-Math.pow(1-t,3);
+
+// URDF
+async function parseURDF(){
+  const d=new DOMParser().parseFromString(await(await fetch(U)).text(),'application/xml');
+  const links=[],joints=[];
+  d.querySelectorAll('link').forEach(e=>{const n=e.getAttribute('name'),v=e.querySelector('visual');let g=null,o=null;
+    if(v){const ge=v.querySelector('geometry');if(ge){const m=ge.querySelector('mesh'),c=ge.querySelector('cylinder');
+    if(m)g={t:'m',f:m.getAttribute('filename'),s:(m.getAttribute('scale')||'1 1 1').split(/\s+/).map(Number)};
+    else if(c)g={t:'c',r:+c.getAttribute('radius'),l:+c.getAttribute('length')};}
+    const ori=v.querySelector('origin');if(ori)o={xyz:(ori.getAttribute('xyz')||'0 0 0').split(/\s+/).map(Number),rpy:(ori.getAttribute('rpy')||'0 0 0').split(/\s+/).map(Number)};}
+    links.push({name:n,g,o});});
+  d.querySelectorAll('joint').forEach(e=>{const o=e.querySelector('origin');
+    joints.push({n:e.getAttribute('name'),p:e.querySelector('parent')?.getAttribute('link'),c:e.querySelector('child')?.getAttribute('link'),
+    o:o?{xyz:(o.getAttribute('xyz')||'0 0 0').split(/\s+/).map(Number),rpy:(o.getAttribute('rpy')||'0 0 0').split(/\s+/).map(Number)}:null});});
+  return{links,joints};
+}
+function mp(f){if(!f.startsWith('package://'))return f;const p=f.substring(10);if(p.startsWith('meshes/'))return M+p.substring(7);const i=p.indexOf('/meshes/');return i>=0?M+p.substring(i+8):M+p.split('/').pop();}
+
+function sec(n){
+  if(/^r_thumb|^r_index|^r_middle|^r_ring|^r_pinky|r_hand_link|r_hand_cover/.test(n))return'rhand';
+  if(/^l_thumb|^l_index|^l_middle|^l_ring|^l_pinky|l_hand_link|l_hand_cover/.test(n))return'lhand';
+  if(/r_shoulder|r_bicep|r_forearm|r_wrist/.test(n))return'rarm';
+  if(/l_shoulder|l_bicep|l_forearm|l_wrist/.test(n))return'larm';
+  if(/head|skull|jaw|_ear|face|eye|iris|camera/.test(n))return'head';
+  if(/torso|chest|kinect/.test(n))return'torso';
+  if(/stomach|disk|waist/.test(n))return'mid';
+  return'base';
+}
+
+// Scene
+const R=new THREE.WebGLRenderer({antialias:true});
+R.setSize(innerWidth,innerHeight);R.setPixelRatio(Math.min(devicePixelRatio,2));
+R.shadowMap.enabled=true;R.toneMapping=THREE.ACESFilmicToneMapping;R.toneMappingExposure=1.2;
+document.body.prepend(R.domElement);
+
+const S=new THREE.Scene();
+S.background=new THREE.Color(0xffffff);
+
+const cam=new THREE.PerspectiveCamera(35,innerWidth/innerHeight,.01,50);
+cam.position.set(0.8,1.4,2.8);
+
+const oc=new OrbitControls(cam,R.domElement);
+oc.target.set(0,1.0,0);oc.enableDamping=true;oc.dampingFactor=.03;
+oc.autoRotate=true;oc.autoRotateSpeed=0.4;oc.update();
+
+// Lighting - soft studio
+S.add(new THREE.AmbientLight(0x404060,.5));
+const k=new THREE.DirectionalLight(0xffffff,1.0);k.position.set(3,5,4);k.castShadow=true;k.shadow.mapSize.set(1024,1024);S.add(k);
+const f=new THREE.DirectionalLight(0x6080ff,.4);f.position.set(-3,3,-2);S.add(f);
+const b=new THREE.DirectionalLight(0xffd0a0,.2);b.position.set(0,2,-4);S.add(b);
+
+// Ground
+const gnd=new THREE.Mesh(new THREE.PlaneGeometry(6,6),new THREE.ShadowMaterial({opacity:.15}));
+gnd.rotation.x=-Math.PI/2;gnd.receiveShadow=true;S.add(gnd);
+
+// Build
+const stl=new STLLoader();
+function ld(url){return new Promise((r,j)=>{const t=setTimeout(()=>{j('timeout');},8000);stl.load(url,g=>{clearTimeout(t);r(g);},undefined,e=>{clearTimeout(t);j(e);});});}
+
+let pieces=[];
+async function build(){
+  const{links,joints}=await parseURDF();const lt=document.getElementById('lt');
+  const p2c=new Map();joints.forEach(j=>{if(!p2c.has(j.p))p2c.set(j.p,[]);p2c.get(j.p).push(j);});
+  const cs=new Set(joints.map(j=>j.c)),root=links.find(l=>!cs.has(l.name));
+  const grps=new Map();links.forEach(l=>grps.set(l.name,new THREE.Group()));
+  const robot=new THREE.Group();robot.rotation.x=-Math.PI/2;S.add(robot);
+  function att(pn,pg){(p2c.get(pn)||[]).forEach(j=>{const jg=new THREE.Group();if(j.o){jg.position.set(...j.o.xyz);jg.rotation.order='XYZ';jg.rotation.set(...j.o.rpy);}pg.add(jg);const cg=grps.get(j.c);if(cg){jg.add(cg);att(j.c,cg);}});}
+  if(root){robot.add(grps.get(root.name));att(root.name,grps.get(root.name));}
+
+  const q=root?[root.name]:[],seen=new Set();let n=0;const tot=links.filter(l=>l.g).length;
+  while(q.length){
+    const cur=q.shift();if(seen.has(cur))continue;seen.add(cur);
+    const lk=links.find(l=>l.name===cur);
+    if(lk?.g){
+      const grp=grps.get(lk.name);let mesh=null;
+      if(lk.g.t==='m'){
+        lt.textContent=`${++n}/${tot} — ${lk.name}`;
+        await new Promise(r=>setTimeout(r,0));
+        try{const geo=await ld(mp(lk.g.f));geo.computeVertexNormals();
+          mesh=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({color:0x8090a0,metalness:.5,roughness:.45}));
+          mesh.castShadow=true;if(lk.g.s)mesh.scale.set(...lk.g.s);
+        }catch(e){console.warn('skip',lk.name,e);}
+      }else if(lk.g.t==='c'){
+        const geo=new THREE.CylinderGeometry(lk.g.r,lk.g.r,lk.g.l);geo.rotateX(Math.PI/2);
+        mesh=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({color:0x506070,metalness:.5,roughness:.4}));
+      }
+      if(mesh){
+        if(lk.o){mesh.position.set(...lk.o.xyz);mesh.rotation.order='XYZ';mesh.rotation.set(...lk.o.rpy);}
+        grp.add(mesh);grp.updateMatrixWorld(true);
+        const wp=new THREE.Vector3();mesh.getWorldPosition(wp);
+        mesh.visible=false;
+        pieces.push({name:lk.name,mesh,grp,wp,sec:sec(lk.name),fp:mesh.position.clone()});
+      }
+    }
+    (p2c.get(cur)||[]).forEach(j=>q.push(j.c));
+  }
+}
+
+// Animation: piece slides in from the side + camera gently follows
+function slideIn(p,dur){
+  return new Promise(rv=>{
+    const mat=p.mesh.material;
+    const end=p.fp.clone();
+    const start=end.clone();
+    start.x+=0.35;start.z+=0.15;
+    p.mesh.position.copy(start);
+    p.mesh.visible=true;
+    mat.transparent=true;mat.opacity=0;
+
+    // Gentle camera drift toward this piece's world position
+    const camStart=oc.target.clone();
+    const camEnd=camStart.clone().lerp(p.wp,.22); // 22% drift — caméra suit la pièce
+
+    const t0=performance.now();
+    (function tick(){
+      const t=Math.min((performance.now()-t0)/dur,1);
+      const e=easeOut(t);
+      p.mesh.position.lerpVectors(start,end,e);
+      mat.opacity=e;
+      // Slow camera follow
+      oc.target.lerpVectors(camStart,camEnd,e);
+      oc.update();
+      if(t<1)requestAnimationFrame(tick);
+      else{mat.transparent=false;mat.opacity=1;p.mesh.position.copy(end);rv();}
+    })();
+  });
+}
+
+// Batch animation: multiple pieces slide in at the same time (for fingers)
+function slideInBatch(pcs,dur){
+  return new Promise(rv=>{
+    const data=pcs.map(p=>{
+      const end=p.fp.clone();const start=end.clone();start.x+=0.3;start.z+=0.12;
+      p.mesh.position.copy(start);p.mesh.visible=true;
+      p.mesh.material.transparent=true;p.mesh.material.opacity=0;
+      return{p,start,end,mat:p.mesh.material};
+    });
+    const t0=performance.now();
+    (function tick(){
+      const t=Math.min((performance.now()-t0)/dur,1);
+      const e=easeOut(t);
+      data.forEach(d=>{d.p.mesh.position.lerpVectors(d.start,d.end,e);d.mat.opacity=e;});
+      if(t<1)requestAnimationFrame(tick);
+      else{data.forEach(d=>{d.mat.transparent=false;d.mat.opacity=1;d.p.mesh.position.copy(d.end);});rv();}
+    })();
+  });
+}
+
+// Smooth camera move
+function camTo(pos,tgt,dur){
+  return new Promise(rv=>{
+    const sp=cam.position.clone(),st=oc.target.clone();
+    const ep=new THREE.Vector3(...pos),et=new THREE.Vector3(...tgt);
+    const t0=performance.now();
+    (function tick(){
+      const t=Math.min((performance.now()-t0)/dur,1);
+      const e=easeIO(t);
+      cam.position.lerpVectors(sp,ep,e);oc.target.lerpVectors(st,et,e);oc.update();
+      if(t<1)requestAnimationFrame(tick);else rv();
+    })();
+  });
+}
+
+// Sections config
+const SECTIONS=[
+  {id:'head',  label:'Tête',          cam:[0.15,1.85,1.1], tgt:[0,1.75,0]},
+  {id:'rarm',  label:'Bras Droit',    cam:[-0.6,1.4,1.3],  tgt:[-0.3,1.25,0]},
+  {id:'rhand', label:'Main Droite',   cam:[0,0.85,0.9],    tgt:[0,0.75,0]},
+  {id:'larm',  label:'Bras Gauche',   cam:[0.6,1.4,1.3],   tgt:[0.3,1.25,0]},
+  {id:'torso', label:'Torse',         cam:[0.1,1.5,1.5],   tgt:[0,1.35,0]},
+];
+
+let playing=false,paused=false,speed=1,gIdx=0;
+
+async function play(){
+  if(playing&&!paused)return;playing=true;paused=false;
+
+  const allIds=['head','rarm','rhand','larm','torso','lhand','mid'];
+  const total=allIds.reduce((s,id)=>s+pieces.filter(p=>p.sec===id).length,0);
+
+  // ── Sections normales ──
+  for(const section of SECTIONS){
+    if(!playing||paused)break;
+    let secP=pieces.filter(p=>p.sec===section.id);
+    if(!secP.length)continue;
+
+    // Sort: internals first, covers/shell last
+    secP.sort((a,b)=>{
+      const ao=/skull|face|_ear|cover|chest|bicepcover/.test(a.name)?1:0;
+      const bo=/skull|face|_ear|cover|chest|bicepcover/.test(b.name)?1:0;
+      return ao-bo;
+    });
+
+    document.getElementById('sec').textContent=section.label;
+    // NE PAS cacher les pièces déjà assemblées — elles s'accumulent
+    await camTo(section.cam,section.tgt,1000/speed);
+    await new Promise(r=>setTimeout(r,250/speed));
+
+    // Mains: batch de 3
+    if(section.id==='rhand'){
+      const batches=[];
+      for(let i=0;i<secP.length;i+=3)batches.push(secP.slice(i,i+3));
+      for(const batch of batches){
+        if(!playing||paused)break;
+        gIdx+=batch.length;
+        document.getElementById('bar').style.width=((gIdx/total)*100)+'%';
+        document.getElementById('ct').textContent=`${gIdx}/${total}`;
+        document.getElementById('pn').textContent=batch.map(p=>p.name.replace(/_/g,' ').replace(/link$/,'').trim()).join(', ');
+        await slideInBatch(batch,900/speed);
+        await new Promise(r=>setTimeout(r,200/speed));
+      }
+    }else{
+      for(const p of secP){
+        if(!playing||paused)break;
+        gIdx++;
+        document.getElementById('bar').style.width=((gIdx/total)*100)+'%';
+        document.getElementById('ct').textContent=`${gIdx}/${total}`;
+        document.getElementById('pn').textContent=p.name.replace(/_/g,' ').replace(/link$/,'').trim();
+        await slideIn(p,1300/speed);
+        await new Promise(r=>setTimeout(r,280/speed));
+      }
+    }
+    await new Promise(r=>setTimeout(r,500/speed));
+  }
+
+  // ── CONNEXION : les deux bras + torse déjà assemblés, doigts gauche apparaissent ──
+  if(playing&&!paused){
+    document.getElementById('sec').textContent='Connexion — Torse & Bras';
+
+    // Les pièces déjà assemblées restent visibles (head, rarm, rhand, larm, torso)
+    // Juste faire apparaître les doigts gauche (lhand) en fade-in
+    const lhandPieces=pieces.filter(p=>p.sec==='lhand');
+    lhandPieces.forEach(p=>{
+      p.mesh.visible=true;
+      p.mesh.position.copy(p.fp);
+      p.mesh.material.transparent=true;
+      p.mesh.material.opacity=0;
+    });
+
+    gIdx+=lhandPieces.length;
+    document.getElementById('bar').style.width=((gIdx/total)*100)+'%';
+    document.getElementById('ct').textContent=`${gIdx}/${total}`;
+
+    // Caméra zoom arrière pour voir tout le corps avec les deux bras
+    await camTo([0,1.55,2.2],[0,1.35,0],1000/speed);
+    await new Promise(r=>setTimeout(r,300/speed));
+
+    // Fade-in doigts gauche
+    await new Promise(rv=>{
+      const t0=performance.now();const dur=1400/speed;
+      (function tick(){
+        const t=Math.min((performance.now()-t0)/dur,1);const e=easeOut(t);
+        lhandPieces.forEach(p=>{p.mesh.material.opacity=e;});
+        if(t<1)requestAnimationFrame(tick);
+        else{lhandPieces.forEach(p=>{p.mesh.material.transparent=false;p.mesh.material.opacity=1;});rv();}
+      })();
+    });
+
+    // Caméra montre épaule droite puis épaule gauche
+    await camTo([-0.7,1.4,1.8],[0,1.2,0],1000/speed);
+    await new Promise(r=>setTimeout(r,400/speed));
+    await camTo([0.7,1.4,1.8],[0,1.2,0],1000/speed);
+    await new Promise(r=>setTimeout(r,400/speed));
+    await camTo([0,1.5,2.2],[0,1.3,0],800/speed);
+    await new Promise(r=>setTimeout(r,400/speed));
+  }
+
+  // ── Support : Abdomen uniquement (Base supprimée) ──
+  for(const id of['mid']){
+    if(!playing||paused)break;
+    const label=id==='mid'?'Abdomen':'Base';
+    const camCfg=id==='mid'
+      ?{cam:[0.3,1.1,1.8],tgt:[0,1.0,0]}
+      :{cam:[0.3,0.5,1.8],tgt:[0,0.3,0]};
+    let secP=pieces.filter(p=>p.sec===id);
+    if(!secP.length)continue;
+
+    document.getElementById('sec').textContent=label;
+    // NE PAS cacher les pièces déjà assemblées — juste déplacer la caméra
+    await camTo(camCfg.cam,camCfg.tgt,900/speed);
+    await new Promise(r=>setTimeout(r,250/speed));
+
+    for(const p of secP){
+      if(!playing||paused)break;
+      gIdx++;
+      document.getElementById('bar').style.width=((gIdx/total)*100)+'%';
+      document.getElementById('ct').textContent=`${gIdx}/${total}`;
+      await slideIn(p,1300/speed);
+      await new Promise(r=>setTimeout(r,280/speed));
+    }
+    await new Promise(r=>setTimeout(r,500/speed));
+  }
+
+  // ── Réveal final ──
+  if(playing&&!paused){
+    document.getElementById('sec').textContent='Robot AXEL — Complet';
+    pieces.forEach(p=>{
+      p.mesh.visible=true;
+      p.mesh.position.copy(p.fp);
+      p.mesh.material.opacity=1;
+      p.mesh.material.transparent=false;
+    });
+    await camTo([1.2,1.4,3.2],[0,1.0,0],2000);
+    oc.autoRotateSpeed=1.0;
+    document.getElementById('pn').textContent='Assemblage terminé ✓';
+  }
+  playing=false;
+}
+
+function pause(){paused=true;}
+function reset(){
+  playing=false;paused=false;gIdx=0;
+  pieces.forEach(p=>{p.mesh.visible=false;p.mesh.position.copy(p.fp);});
+  cam.position.set(0.8,1.4,2.8);oc.target.set(0,1,0);oc.autoRotateSpeed=0.4;oc.update();
+  document.getElementById('bar').style.width='0%';document.getElementById('ct').textContent='';
+  document.getElementById('pn').textContent='';document.getElementById('sec').textContent='';
+}
+
+document.getElementById('bp').onclick=play;
+document.getElementById('bpa').onclick=pause;
+document.getElementById('br').onclick=reset;
+[['bs',.5],['bn',1],['bf',2]].forEach(([id,s])=>{document.getElementById(id).onclick=()=>{speed=s;document.querySelectorAll('.b').forEach(b=>b.classList.remove('on'));document.getElementById(id).classList.add('on');};});
+
+(function a(){requestAnimationFrame(a);oc.update();R.render(S,cam)})();
+window.addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();R.setSize(innerWidth,innerHeight);});
+
+(async()=>{try{await build();console.log('Ready:',pieces.length);document.getElementById('ld').classList.add('h');}catch(e){document.getElementById('lt').textContent='Erreur: '+(e.message||e);console.error(e);}})();
+</script>
+</body>
+</html>
